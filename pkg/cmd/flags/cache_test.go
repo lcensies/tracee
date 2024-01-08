@@ -28,7 +28,9 @@ func TestPrepareCache(t *testing.T) {
 			testName:      "invalid cache-type",
 			cacheSlice:    []string{"cache-type=bleh"},
 			expectedCache: nil,
-			expectedError: errors.New("unrecognized cache-mem option: cache-type=bleh (valid options are: none,mem)"),
+			expectedError: errors.New(
+				"unrecognized cache-mem option: cache-type=bleh (valid options are: none,mem)",
+			),
 		},
 		{
 			testName:      "cache-type=none",
@@ -44,7 +46,9 @@ func TestPrepareCache(t *testing.T) {
 			testName:      "mem-cache-size=X without cache-type=mem",
 			cacheSlice:    []string{"mem-cache-size=256"},
 			expectedCache: nil,
-			expectedError: errors.New("you need to specify cache-type=mem before setting mem-cache-size"),
+			expectedError: errors.New(
+				"you need to specify cache-type=mem before setting mem-cache-size",
+			),
 		},
 		{
 			testName:      "cache-type=mem with mem-cache-size=512",

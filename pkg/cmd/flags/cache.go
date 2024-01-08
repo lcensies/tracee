@@ -25,12 +25,14 @@ func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
 	var cache queue.CacheConfig
 	var err error
 	cacheTypeMem := false
+	cacheTypeHybrid := false
 
 	if strings.Contains(cacheSlice[0], "none") {
 		return nil, nil
 	}
 
 	eventsCacheMemSizeMb := 0
+	eventsCacheDiskSizeMb := 8192
 	for _, o := range cacheSlice {
 		cacheParts := strings.SplitN(o, "=", 2)
 		if len(cacheParts) != 2 {
@@ -44,24 +46,44 @@ func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
 			switch value {
 			case "mem":
 				cacheTypeMem = true
+			case "hybrid":
+				cacheTypeHybrid = true
 			default:
-				return nil, errfmt.Errorf("unrecognized cache-mem option: %s (valid options are: none,mem)", o)
+				return nil, errfmt.Errorf(
+					"unrecognized cache-mem option: %s (valid options are: none,mem)",
+					o,
+				)
 			}
 		case "mem-cache-size":
-			if !cacheTypeMem {
-				return nil, errfmt.Errorf("you need to specify cache-type=mem before setting mem-cache-size")
+			if !cacheTypeMem && !cacheTypeHybrid {
+				return nil, errfmt.Errorf(
+					"you need to specify cache-type=mem or cache-type=hybrid before setting mem-cache-size",
+				)
 			}
 			eventsCacheMemSizeMb, err = strconv.Atoi(value)
 			if err != nil {
 				return nil, errfmt.Errorf("could not parse mem-cache-size value: %v", err)
 			}
-
+		case "disk-cache-size":
+			if !cacheTypeMem && !cacheTypeHybrid {
+				return nil, errfmt.Errorf(
+					"you need to specify cache-type=hybrid before setting mem-cache-size",
+				)
+			}
+			eventsCacheDiskSizeMb, err = strconv.Atoi(value)
+			if err != nil {
+				return nil, errfmt.Errorf("could not parse mem-cache-size value: %v", err)
+			}
 		default:
 			return nil, errfmt.Errorf("unrecognized cache option format: %s", o)
 		}
 	}
 	if cacheTypeMem {
 		return queue.NewEventQueueMem(eventsCacheMemSizeMb), nil
+	} else if cacheTypeHybrid {
+		cache, err := queue.NewEventQueueHybrid(eventsCacheMemSizeMb, eventsCacheDiskSizeMb)
+		return cache, err
+
 	}
 
 	return nil, nil

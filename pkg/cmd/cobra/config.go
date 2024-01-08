@@ -129,8 +129,9 @@ func getCRIConfigFlags(rawValue interface{}) ([]string, error) {
 //
 
 type CacheConfig struct {
-	Type string `mapstructure:"type"`
-	Size int    `mapstructure:"size"`
+	Type     string `mapstructure:"type"`
+	Size     int    `mapstructure:"size"`
+	DiskSize int    `mapstructure:"disk-size"`
 }
 
 func (c *CacheConfig) flags() []string {
@@ -141,6 +142,9 @@ func (c *CacheConfig) flags() []string {
 	}
 	if c.Size != 0 {
 		flags = append(flags, fmt.Sprintf("mem-cache-size=%d", c.Size))
+	}
+	if c.DiskSize != 0 {
+		flags = append(flags, fmt.Sprintf("disk-cache-size=%d", c.Size))
 	}
 
 	return flags

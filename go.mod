@@ -1,6 +1,6 @@
 module github.com/aquasecurity/tracee
 
-go 1.19
+go 1.21
 
 require (
 	github.com/IBM/fluent-forward-go v0.2.1
@@ -15,6 +15,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/hashicorp/golang-lru/v2 v2.0.2
+	github.com/joncrlsn/dque v0.0.0-20211108142734-c2ef48c5192a
 	github.com/mennanov/fmutils v0.2.0
 	github.com/minio/sha256-simd v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
@@ -40,6 +41,7 @@ require (
 	k8s.io/kubectl v0.27.7
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.68
 	sigs.k8s.io/controller-runtime v0.16.3
+
 )
 
 require (
@@ -57,6 +59,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
+	github.com/gofrs/flock v0.7.1 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
