@@ -2,11 +2,13 @@ package queue
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"sync"
 
 	"github.com/joncrlsn/dque"
 
+	"github.com/aquasecurity/tracee/pkg/logger"
 	"github.com/aquasecurity/tracee/types/trace"
 )
 
@@ -22,13 +24,22 @@ type eventQueueHybrid struct {
 	itemsPerSegment       int
 }
 
+// TODO: parametrize
+var storeAt string = "/tmp/tracee/hybrid_cache"
+
 func NewEventQueueHybrid(memorySizeMb int, diskSizeMb int) (CacheConfig, error) {
 	q := &eventQueueHybrid{
 		eventsCacheMemSizeMB:  memorySizeMb,
 		eventsCacheDiskSizeMB: diskSizeMb,
 	}
 	err := q.setup()
-	q.verbose = fmt.Sprintf("In-Memory Event Queue (Size = %d MB)", q.eventsCacheMemSizeMB)
+	if err != nil {
+		return nil, err
+	}
+	q.verbose = fmt.Sprintf(
+		"Hybrid Event Queue (Size = %d MB in-memory, %d MB on-disk)",
+		q.eventsCacheMemSizeMB, q.eventsCacheDiskSizeMB,
+	)
 	return q, err
 }
 
@@ -51,9 +62,16 @@ func (q *eventQueueHybrid) setup() error {
 	q.itemsPerSegment = q.maxAmountOfEvents / 10
 
 	// TODO: parametrize path
-	storeAt := "/tmp/tracee/hybrid_cache"
 	queuePath := path.Dir(storeAt)
 	queueName := path.Base(storeAt)
+
+	// Cleanup queue at the start. In some cases persistence
+	// is benefitial (for example, if you want to keep events)
+	// even after tracee  restart, however at the testing stage
+	// we are interested in clean environment
+
+	// TODO: parametrize whether queue should be cleaned
+	_ = os.RemoveAll(storeAt)
 
 	dq, err := dque.NewOrOpen(
 		queueName,
@@ -118,6 +136,22 @@ func (q *eventQueueHybrid) Dequeue() *trace.Event {
 	return event
 }
 
+func (q *eventQueueHybrid) Size() int {
+	// TODO: consider using SizeUnsafe()
+	if q.cache != nil {
+
+		logger.Debugw("Internal queue size: ", q.cache.Size())
+		return q.cache.Size()
+	} else {
+		logger.Errorw("Cache is undefined")
+		return 0
+	}
+}
+
+func (q *eventQueueHybrid) Capacity() int {
+	return q.maxAmountOfEvents
+}
+
 // getQueueSizeInEvents returns size of the fifo queue, in # of events, based on
 // the host size
 func (q *eventQueueHybrid) getQueueSizeInEvents() int {
@@ -136,7 +170,7 @@ func (q *eventQueueHybrid) getQueueSizeInEvents() int {
 		return amountInGB * 1024
 	}
 	amountOfEvents := func(amountInMB int) int {
-		return mbToKB(kbToB(amountInMB)) / eventSize
+		return kbToB(mbToKB(amountInMB)) / eventSize
 	}
 
 	// EventsCacheMemSize was provided, return exact amount of events for it
@@ -157,4 +191,12 @@ func (q *eventQueueHybrid) getQueueSizeInEvents() int {
 
 	// bigger hosts, cache = ~4GB in events #
 	return amountOfEvents(gbToMB(4))
+}
+
+func (q *eventQueueHybrid) Teardown() error {
+	if _, err := os.Stat(storeAt); err == nil {
+		return os.RemoveAll(storeAt)
+	} else {
+		return err
+	}
 }

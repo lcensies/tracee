@@ -77,6 +77,15 @@ func (q *eventQueueMem) Dequeue() *trace.Event {
 	return &event
 }
 
+func (q *eventQueueMem) Size() int {
+	return q.cache.Len()
+}
+
+func (q *eventQueueMem) Capacity() int {
+	// TODO: consider using SizeUnsafe()
+	return q.maxAmountOfEvents
+}
+
 // getQueueSizeInEvents returns size of the fifo queue, in # of events, based on
 // the host size
 func (q *eventQueueMem) getQueueSizeInEvents() int {
@@ -116,4 +125,8 @@ func (q *eventQueueMem) getQueueSizeInEvents() int {
 
 	// bigger hosts, cache = ~4GB in events #
 	return amountOfEvents(gbToMB(4))
+}
+
+func (q *eventQueueMem) Teardown() error {
+	return nil
 }

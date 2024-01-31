@@ -59,7 +59,11 @@ access to hundreds of events that help you understand how your system behaves.`,
 			}
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-			defer stop()
+			exitHandler := func() {
+				runner.Teardown()
+				stop()
+			}
+			defer exitHandler()
 
 			err = runner.Run(ctx)
 			if err != nil {
@@ -255,7 +259,10 @@ func initCmd() error {
 		false,
 		"\t\t\t\t\tEnable metrics endpoint",
 	)
-	err = viper.BindPFlag(server.MetricsEndpointFlag, rootCmd.Flags().Lookup(server.MetricsEndpointFlag))
+	err = viper.BindPFlag(
+		server.MetricsEndpointFlag,
+		rootCmd.Flags().Lookup(server.MetricsEndpointFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -265,7 +272,10 @@ func initCmd() error {
 		false,
 		"\t\t\t\t\tEnable healthz endpoint",
 	)
-	err = viper.BindPFlag(server.HealthzEndpointFlag, rootCmd.Flags().Lookup(server.HealthzEndpointFlag))
+	err = viper.BindPFlag(
+		server.HealthzEndpointFlag,
+		rootCmd.Flags().Lookup(server.HealthzEndpointFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -275,7 +285,10 @@ func initCmd() error {
 		false,
 		"\t\t\t\t\tEnable pprof endpoints",
 	)
-	err = viper.BindPFlag(server.PProfEndpointFlag, rootCmd.Flags().Lookup(server.PProfEndpointFlag))
+	err = viper.BindPFlag(
+		server.PProfEndpointFlag,
+		rootCmd.Flags().Lookup(server.PProfEndpointFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -285,7 +298,10 @@ func initCmd() error {
 		false,
 		"\t\t\t\t\tEnable pyroscope agent",
 	)
-	err = viper.BindPFlag(server.PyroscopeAgentFlag, rootCmd.Flags().Lookup(server.PyroscopeAgentFlag))
+	err = viper.BindPFlag(
+		server.PyroscopeAgentFlag,
+		rootCmd.Flags().Lookup(server.PyroscopeAgentFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -295,7 +311,10 @@ func initCmd() error {
 		":3366",
 		"<url:port>\t\t\t\tListening address of the metrics endpoint server",
 	)
-	err = viper.BindPFlag(server.HTTPListenEndpointFlag, rootCmd.Flags().Lookup(server.HTTPListenEndpointFlag))
+	err = viper.BindPFlag(
+		server.HTTPListenEndpointFlag,
+		rootCmd.Flags().Lookup(server.HTTPListenEndpointFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -305,7 +324,10 @@ func initCmd() error {
 		"", // disabled by default
 		"<protocol:addr>\t\t\tListening address of the grpc server eg: tcp:4466, unix:/tmp/tracee.sock (default: disabled)",
 	)
-	err = viper.BindPFlag(server.GRPCListenEndpointFlag, rootCmd.Flags().Lookup(server.GRPCListenEndpointFlag))
+	err = viper.BindPFlag(
+		server.GRPCListenEndpointFlag,
+		rootCmd.Flags().Lookup(server.GRPCListenEndpointFlag),
+	)
 	if err != nil {
 		return errfmt.WrapError(err)
 	}

@@ -13,4 +13,7 @@ type EventQueue interface {
 	String() string
 	Enqueue(*trace.Event)
 	Dequeue() *trace.Event
+	Size() int
+	Capacity() int
+	Teardown() error
 }

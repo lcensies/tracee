@@ -36,10 +36,12 @@ func (r Runner) Run(ctx context.Context) error {
 	t.AddReadyCallback(
 		func(ctx context.Context) {
 			logger.Debugw("Tracee is ready callback")
+
 			if r.HTTPServer != nil {
 				if r.HTTPServer.MetricsEndpointEnabled() {
 					r.TraceeConfig.MetricsEnabled = true // TODO: is this needed ?
-					if err := t.Stats().RegisterPrometheus(); err != nil {
+
+					if err := t.Stats().RegisterPrometheus(r.TraceeConfig); err != nil {
 						logger.Errorw("Registering prometheus metrics", "error", err)
 					}
 				}
@@ -162,5 +164,13 @@ func removePidFile(dir *os.File) error {
 		return errfmt.Errorf("%v", err)
 	}
 
+	return nil
+}
+
+func (runner *Runner) Teardown() error {
+	cache := runner.TraceeConfig.Cache
+	if cache != nil {
+		return cache.Teardown()
+	}
 	return nil
 }

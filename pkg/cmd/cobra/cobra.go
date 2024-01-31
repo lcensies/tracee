@@ -3,10 +3,9 @@ package cobra
 import (
 	"errors"
 
+	"github.com/aquasecurity/libbpfgo/helpers"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"github.com/aquasecurity/libbpfgo/helpers"
 
 	"github.com/aquasecurity/tracee/pkg/cmd"
 	"github.com/aquasecurity/tracee/pkg/cmd/flags"
@@ -82,8 +81,19 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 
 	osInfo, err := helpers.GetOSInfo()
 	if err != nil {
-		logger.Debugw("OSInfo", "warning: os-release file could not be found", "error", err) // only to be enforced when BTF needs to be downloaded, later on
-		logger.Debugw("OSInfo", "os_release_field", helpers.OS_KERNEL_RELEASE, "OS_KERNEL_RELEASE", osInfo.GetOSReleaseFieldValue(helpers.OS_KERNEL_RELEASE))
+		logger.Debugw(
+			"OSInfo",
+			"warning: os-release file could not be found",
+			"error",
+			err,
+		) // only to be enforced when BTF needs to be downloaded, later on
+		logger.Debugw(
+			"OSInfo",
+			"os_release_field",
+			helpers.OS_KERNEL_RELEASE,
+			"OS_KERNEL_RELEASE",
+			osInfo.GetOSReleaseFieldValue(helpers.OS_KERNEL_RELEASE),
+		)
 	} else {
 		osInfoSlice := make([]interface{}, 0)
 		for k, v := range osInfo.GetOSReleaseAllFieldValues() {
@@ -120,9 +130,12 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 	if err != nil {
 		return runner, err
 	}
+
 	cfg.Cache = cache
 	if cfg.Cache != nil {
 		logger.Debugw("Cache", "type", cfg.Cache.String())
+	} else {
+		logger.Debugw("Cache is not enabled")
 	}
 
 	// Process Tree command line flags
@@ -265,7 +278,9 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 		logger.Debugw("OSInfo", "lockdown", err)
 	}
 	if err == nil && lockdown == helpers.CONFIDENTIALITY {
-		return runner, errfmt.Errorf("kernel lockdown is set to 'confidentiality', can't load eBPF programs")
+		return runner, errfmt.Errorf(
+			"kernel lockdown is set to 'confidentiality', can't load eBPF programs",
+		)
 	}
 
 	logger.Debugw("OSInfo", "security_lockdown", lockdown)
@@ -277,7 +292,9 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 		return runner, err
 	}
 	if !enabled {
-		logger.Errorw("ftrace_enabled: ftrace is not enabled, kernel events won't be caught, make sure to enable it by executing echo 1 | sudo tee /proc/sys/kernel/ftrace_enabled")
+		logger.Errorw(
+			"ftrace_enabled: ftrace is not enabled, kernel events won't be caught, make sure to enable it by executing echo 1 | sudo tee /proc/sys/kernel/ftrace_enabled",
+		)
 	}
 
 	// Pick OS information
@@ -334,3 +351,6 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 
 	return runner, nil
 }
+
+
+

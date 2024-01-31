@@ -65,7 +65,7 @@ func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
 				return nil, errfmt.Errorf("could not parse mem-cache-size value: %v", err)
 			}
 		case "disk-cache-size":
-			if !cacheTypeMem && !cacheTypeHybrid {
+			if !cacheTypeHybrid {
 				return nil, errfmt.Errorf(
 					"you need to specify cache-type=hybrid before setting mem-cache-size",
 				)

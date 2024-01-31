@@ -45,7 +45,11 @@ func main() {
 			}
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-			defer stop()
+			exitHandler := func() {
+				runner.Teardown()
+				stop()
+			}
+			defer exitHandler()
 
 			return runner.Run(ctx)
 		},

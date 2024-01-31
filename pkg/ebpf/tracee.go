@@ -11,10 +11,9 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"kernel.org/pub/linux/libs/security/libcap/cap"
-
 	bpf "github.com/aquasecurity/libbpfgo"
 	"github.com/aquasecurity/libbpfgo/helpers"
+	"kernel.org/pub/linux/libs/security/libcap/cap"
 
 	"github.com/aquasecurity/tracee/pkg/bucketscache"
 	"github.com/aquasecurity/tracee/pkg/bufferdecoder"
@@ -753,7 +752,12 @@ func (t *Tracee) initDerivationTable() error {
 }
 
 // RegisterEventDerivation registers an event derivation handler for tracee to use in the event pipeline
-func (t *Tracee) RegisterEventDerivation(deriveFrom events.ID, deriveTo events.ID, deriveCondition func() bool, deriveLogic derive.DeriveFunction) error {
+func (t *Tracee) RegisterEventDerivation(
+	deriveFrom events.ID,
+	deriveTo events.ID,
+	deriveCondition func() bool,
+	deriveLogic derive.DeriveFunction,
+) error {
 	if t.eventDerivations == nil {
 		return errfmt.Errorf("tracee not initialized yet")
 	}
@@ -1477,7 +1481,12 @@ func (t *Tracee) Run(ctx gocontext.Context) error {
 
 	// record index of written files
 	if t.config.Capture.FileWrite.Capture {
-		err := updateCaptureMapFile(t.OutDir, "written_files", t.writtenFiles, t.config.Capture.FileWrite)
+		err := updateCaptureMapFile(
+			t.OutDir,
+			"written_files",
+			t.writtenFiles,
+			t.config.Capture.FileWrite,
+		)
 		if err != nil {
 			return err
 		}
@@ -1496,7 +1505,12 @@ func (t *Tracee) Run(ctx gocontext.Context) error {
 	return nil
 }
 
-func updateCaptureMapFile(fileDir *os.File, filePath string, capturedFiles map[string]string, cfg config.FileCaptureConfig) error {
+func updateCaptureMapFile(
+	fileDir *os.File,
+	filePath string,
+	capturedFiles map[string]string,
+	cfg config.FileCaptureConfig,
+) error {
 	f, err := utils.OpenAt(fileDir, filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return errfmt.Errorf("error logging captured files")
@@ -1720,7 +1734,8 @@ func (t *Tracee) triggerSeqOpsIntegrityCheck(event trace.Event) {
 //go:noinline
 func (t *Tracee) triggerSeqOpsIntegrityCheckCall(
 	eventHandle uint64,
-	seqOpsStruct [len(derive.NetSeqOps)]uint64) error {
+	seqOpsStruct [len(derive.NetSeqOps)]uint64,
+) error {
 	return nil
 }
 
@@ -1736,10 +1751,16 @@ func (t *Tracee) triggerMemDump(event trace.Event) []error {
 	for p := range t.config.Policies.Map() {
 		printMemDumpFilters := p.ArgFilter.GetEventFilters(events.PrintMemDump)
 		if len(printMemDumpFilters) == 0 {
-			errs = append(errs, errfmt.Errorf("policy %d: no address or symbols were provided to print_mem_dump event. "+
-				"please provide it via -e print_mem_dump.args.address=<hex address>"+
-				", -e print_mem_dump.args.symbol_name=<owner>:<symbol> or "+
-				"-e print_mem_dump.args.symbol_name=<symbol> if specifying a system owned symbol", p.ID))
+			errs = append(
+				errs,
+				errfmt.Errorf(
+					"policy %d: no address or symbols were provided to print_mem_dump event. "+
+						"please provide it via -e print_mem_dump.args.address=<hex address>"+
+						", -e print_mem_dump.args.symbol_name=<owner>:<symbol> or "+
+						"-e print_mem_dump.args.symbol_name=<symbol> if specifying a system owned symbol",
+					p.ID,
+				),
+			)
 
 			continue
 		}
@@ -1765,7 +1786,11 @@ func (t *Tracee) triggerMemDump(event trace.Event) []error {
 			for _, field := range addressFilter.Equal() {
 				address, err := strconv.ParseUint(field, 16, 64)
 				if err != nil {
-					errs[p.ID] = errfmt.Errorf("policy %d: invalid address provided to print_mem_dump event: %v", p.ID, err)
+					errs[p.ID] = errfmt.Errorf(
+						"policy %d: invalid address provided to print_mem_dump event: %v",
+						p.ID,
+						err,
+					)
 
 					continue
 				}
@@ -1795,7 +1820,15 @@ func (t *Tracee) triggerMemDump(event trace.Event) []error {
 				symbol, err := t.kernelSymbols.GetSymbolByName(owner, name)
 				if err != nil {
 					if owner != "system" {
-						errs = append(errs, errfmt.Errorf("policy %d: invalid symbols provided to print_mem_dump event: %s - %v", p.ID, field, err))
+						errs = append(
+							errs,
+							errfmt.Errorf(
+								"policy %d: invalid symbols provided to print_mem_dump event: %s - %v",
+								p.ID,
+								field,
+								err,
+							),
+						)
 
 						continue
 					}
@@ -1822,7 +1855,14 @@ func (t *Tracee) triggerMemDump(event trace.Event) []error {
 							values[i] = v
 						}
 						attemptedSymbols := fmt.Sprintf("{%s,%s,%s,%s}%s", values...)
-						errs = append(errs, errfmt.Errorf("policy %d: invalid symbols provided to print_mem_dump event: %s", p.ID, attemptedSymbols))
+						errs = append(
+							errs,
+							errfmt.Errorf(
+								"policy %d: invalid symbols provided to print_mem_dump event: %s",
+								p.ID,
+								attemptedSymbols,
+							),
+						)
 
 						continue
 					}
