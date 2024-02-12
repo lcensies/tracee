@@ -28,6 +28,7 @@ const (
 type measurement struct {
 	AvgEbpfRate       float64 `json:"avgEbpfRate"`
 	AvgLostEventsRate float64 `json:"avgLostEventsRate"`
+	TotalEvents       int     `json:"totalEvents"`
 	LostEvents        int     `json:"lostEvents"`
 }
 
@@ -35,6 +36,7 @@ func (m measurement) Print() {
 	log.Printf("\n")
 	fmt.Printf("Events/Sec:     %f\n", m.AvgEbpfRate)
 	fmt.Printf("EventsLost/Sec: %f\n", m.AvgLostEventsRate)
+	fmt.Printf("Events Total:    %d\n", m.TotalEvents)
 	fmt.Printf("Events Lost:    %d\n", m.LostEvents)
 	fmt.Println("===============================================")
 }
@@ -127,10 +129,11 @@ func main() {
 
 func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 	const (
-		eventspersec = "events/sec"
-		lostpersec   = "lost/sec"
-		rulespersec  = "rules/sec"
-		lostoverall  = "lost_events"
+		eventspersec    = "events/sec"
+		lostpersec      = "lost/sec"
+		rulespersec     = "rules/sec"
+		lostoverall     = "lost_events"
+		capturedoverall = "total_events"
 	)
 	queries := map[string]struct {
 		queryName string
@@ -144,7 +147,8 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 			queryName: "average ebpf_lostevents/sec",
 			query:     "rate(tracee_ebpf_lostevents_total[1m])",
 		},
-		lostoverall: {queryName: "lost events", query: "tracee_ebpf_lostevents_total"},
+		lostoverall:     {queryName: "lost events", query: "tracee_ebpf_lostevents_total"},
+		capturedoverall: {queryName: "captured events", query: "tracee_ebpf_events_total"},
 	}
 
 	measurement := measurement{}
@@ -172,6 +176,9 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 				measurement.AvgLostEventsRate = val
 			case lostoverall:
 				measurement.LostEvents = int(val)
+				measurement.TotalEvents += int(val)
+			case capturedoverall:
+				measurement.TotalEvents += int(val)
 			}
 		}(field, query.queryName, query.query)
 	}
