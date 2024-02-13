@@ -15,11 +15,9 @@ func TestHybridEnqueueDequeue(t *testing.T) {
 	t.Parallel()
 
 	q, err := NewEventQueueHybrid(512, 512)
+	defer q.Teardown()
 
 	assert.NoError(t, err, "Failed to initialize event queue")
-
-	// capacity := q.Capacity()
-	logger.Errorw("Init cache capacity: ", strconv.Itoa(q.Capacity()))
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -43,4 +41,29 @@ func TestHybridEnqueueDequeue(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+func TestHybridSize(t *testing.T) {
+	t.Parallel()
+
+	q, err := NewEventQueueHybrid(512, 512)
+	defer q.Teardown()
+
+	assert.NoError(t, err, "Failed to initialize event queue")
+
+	assert.Equal(t, q.Capacity(), 524288)
+	hybridQueue := q.(*eventQueueHybrid)
+
+	itemsPerSegment := hybridQueue.getItemsPerSegment()
+	queueMemorySizeMb := hybridQueue.getQueueMemorySizeInMb()
+	queueDiskSizeMb := hybridQueue.eventsCacheDiskSizeMB
+
+	logger.Debugw("Queue items per segment: " + strconv.Itoa(itemsPerSegment))
+	logger.Debugw("Queue memory size: " + strconv.Itoa(queueMemorySizeMb))
+
+	// Memory is 256 and not 512 since it's assigned based on
+	// the host memory capacity heuristics
+	assert.Equal(t, queueMemorySizeMb, 256)
+	assert.Equal(t, itemsPerSegment, 131072)
+	assert.Equal(t, queueDiskSizeMb, 512)
 }
