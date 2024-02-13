@@ -20,7 +20,7 @@ import (
 
 const (
 	prometheusAddressFlag = "prometheus"
-	periodFlag            = "period"
+	periodFlag            = "periodLostTotalRatio"
 	outputFlag            = "output"
 	singleRunFlag         = "single"
 )
@@ -30,6 +30,7 @@ type measurement struct {
 	AvgLostEventsRate float64 `json:"avgLostEventsRate"`
 	TotalEvents       int     `json:"totalEvents"`
 	LostEvents        int     `json:"lostEvents"`
+	LostTotalRatio    float64 `json:"lostTotalRatio"`
 }
 
 func (m measurement) Print() {
@@ -38,6 +39,7 @@ func (m measurement) Print() {
 	fmt.Printf("EventsLost/Sec: %f\n", m.AvgLostEventsRate)
 	fmt.Printf("Events Total:    %d\n", m.TotalEvents)
 	fmt.Printf("Events Lost:    %d\n", m.LostEvents)
+	fmt.Printf("Lost/Total radio:  %v\n", m.LostTotalRatio)
 	fmt.Println("===============================================")
 }
 
@@ -129,11 +131,12 @@ func main() {
 
 func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 	const (
-		eventspersec    = "events/sec"
-		lostpersec      = "lost/sec"
-		rulespersec     = "rules/sec"
-		lostoverall     = "lost_events"
-		capturedoverall = "total_events"
+		eventspersec = "events/sec"
+		lostpersec   = "lost/sec"
+		rulespersec  = "rules/sec"
+		lostoverall  = "lost_events"
+		total        = "total_events"
+		losttototal  = "lost_to_total"
 	)
 	queries := map[string]struct {
 		queryName string
@@ -147,8 +150,19 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 			queryName: "average ebpf_lostevents/sec",
 			query:     "rate(tracee_ebpf_lostevents_total[1m])",
 		},
-		lostoverall:     {queryName: "lost events", query: "tracee_ebpf_lostevents_total"},
-		capturedoverall: {queryName: "captured events", query: "tracee_ebpf_events_total"},
+		// TODO: parametrize whether to capture only last minute for liot
+		lostoverall: {
+			queryName: "lost events",
+			query:     "sum_over_time(tracee_ebpf_lostevents_total[1m])",
+		},
+		total: {
+			queryName: "captured events",
+			query:     "sum_over_time(tracee_ebpf_events_total[1m]) + sum_over_time(tracee_ebpf_lostevents_total[1m])",
+		},
+		losttototal: {
+			queryName: "lost to total events ratio",
+			query:     "sum_over_time(tracee_ebpf_lostevents_total[1m]) / (sum_over_time(tracee_ebpf_lostevents_total[1m]) + sum_over_time(tracee_ebpf_events_total[1m]))",
+		},
 	}
 
 	measurement := measurement{}
@@ -176,13 +190,18 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 				measurement.AvgLostEventsRate = val
 			case lostoverall:
 				measurement.LostEvents = int(val)
-				measurement.TotalEvents += int(val)
-			case capturedoverall:
-				measurement.TotalEvents += int(val)
+			case total:
+				measurement.TotalEvents = int(val)
+			case losttototal:
+				measurement.LostTotalRatio = float64(val)
 			}
 		}(field, query.queryName, query.query)
 	}
 	wg.Wait()
+
+	// measurement.LostTotalRatio = float64(measurement.LostEvents) /
+	// 	float64(measurement.TotalEvents)
+
 	switch outputMode {
 	case prettyOutput:
 		measurement.Print()

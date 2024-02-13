@@ -132,7 +132,7 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		// size := float64(r.TraceeConfig.Cache.Capacity())
 		cache := traceeConfig.Cache
 		if cache == nil {
-			return 0.0
+			return -1.0
 		} else {
 			return float64(cache.Capacity())
 		}
