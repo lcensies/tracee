@@ -10,7 +10,6 @@ import (
 
 	"github.com/joncrlsn/dque"
 
-	"github.com/aquasecurity/tracee/pkg/logger"
 	"github.com/aquasecurity/tracee/types/trace"
 )
 
@@ -169,15 +168,7 @@ func (q *eventQueueHybrid) Dequeue() *trace.Event {
 }
 
 func (q *eventQueueHybrid) Size() int {
-	// TODO: consider using SizeUnsafe()
-	if q.cache != nil {
-
-		logger.Debugw("Internal queue size: ", q.cache.Size())
-		return q.cache.Size()
-	} else {
-		logger.Errorw("Cache is undefined")
-		return 0
-	}
+	return q.cache.Size()
 }
 
 func (q *eventQueueHybrid) Capacity() int {

@@ -1,8 +1,6 @@
 package metrics
 
 import (
-	"strconv"
-
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/aquasecurity/tracee/pkg/config"
@@ -42,7 +40,6 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "events_filtered",
 		Help:      "events filtered by tracee-ebpf in userspace",
 	}, func() float64 { return float64(stats.EventsFiltered.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -52,7 +49,6 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "network_capture_events_total",
 		Help:      "network capture events collected by tracee-ebpf",
 	}, func() float64 { return float64(stats.NetCapCount.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -62,7 +58,6 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "lostevents_total",
 		Help:      "events lost in the submission buffer",
 	}, func() float64 { return float64(stats.LostEvCount.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -72,7 +67,6 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "write_lostevents_total",
 		Help:      "events lost in the write buffer",
 	}, func() float64 { return float64(stats.LostWrCount.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -82,7 +76,6 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "network_capture_lostevents_total",
 		Help:      "network capture lost events in network capture buffer",
 	}, func() float64 { return float64(stats.LostNtCapCount.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -92,33 +85,23 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "bpf_logs_total",
 		Help:      "logs collected by tracee-ebpf during ebpf execution",
 	}, func() float64 { return float64(stats.BPFLogsCount.Get()) }))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
-
-	// cachedEventsCounter := func() prometheus.Collector {
-	// }
 
 	err = prometheus.Register(prometheus.NewCounterFunc(prometheus.CounterOpts{
 		Namespace: "tracee_ebpf",
 		Name:      "events_cached",
 		Help:      "number of cached events",
 	}, func() float64 {
-		// size := float64(r.TraceeConfig.Cache.Size())
-		// size := 34.0
 		cache := traceeConfig.Cache
-		if cache == nil {
-			logger.Errorw("Cache is nil. Returning 0.0 size")
-			return 0.0
-		} else {
-			logger.Infow("Cache size is ", strconv.Itoa(cache.Size()))
-			return float64(cache.Size())
+		cacheSize := 0.0
+		if cache != nil {
+			cacheSize = float64(cache.Size())
 		}
-
-		// return size
+		logger.Debugw("Cache size", "cache_size", cacheSize)
+		return cacheSize
 	}))
-
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
@@ -129,29 +112,18 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Name:      "cache_capacity",
 		Help:      "capacity of the cache in events",
 	}, func() float64 {
-		// size := float64(r.TraceeConfig.Cache.Capacity())
 		cache := traceeConfig.Cache
-		if cache == nil {
-			return -1.0
-		} else {
-			return float64(cache.Capacity())
-		}
-		// size := 34.0
-		// return size
-	}))
+		cacheCapacity := 0.0
 
+		if cache != nil {
+			cacheCapacity = float64(cache.Capacity())
+		}
+
+		return cacheCapacity
+	}))
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
-
-	// for _, builder := range builders {
-	// 	err = prometheus.Register(builder())
-	//
-	// 	if err != nil {
-	// 		return errfmt.WrapError(err)
-	// 	}
-	//
-	// }
 
 	err = prometheus.Register(prometheus.NewCounterFunc(prometheus.CounterOpts{
 		Namespace: "tracee_ebpf",
