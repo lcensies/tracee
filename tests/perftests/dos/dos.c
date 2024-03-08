@@ -30,6 +30,10 @@ void start_dos(int n_fake_syscalls, const char *real_command, float sleep_interv
   char buf[1024];
   struct timespec sleep_timespec = seconds_to_timespec(sleep_interval_sec);
 
+  printf("N_FAKE_SYSCALLS: %d\n", n_fake_syscalls);
+  printf("REAL_COMMAND: %s\n", real_command);
+  printf("SLEEP_INTERVAL: %f\n", sleep_interval_sec);
+
   while (1) {
 
     run_mask_command(n_fake_syscalls);
