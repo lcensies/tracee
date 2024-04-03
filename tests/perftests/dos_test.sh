@@ -1,9 +1,6 @@
-#!/bin/bash
+#!/bin/bash -ex
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-
-_CALL_TEARDOWN=0
-_N_RUNS=1
 
 PROMETHEUS_ADDR=http://localhost:9090
 
@@ -14,31 +11,37 @@ DOS_N_FAKE_COMMANDS="2000"
 DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-".8"}
 
+TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
 TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-2048}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
 TRACEE_PERF_BUFFER_SIZE=${TRACEE_PERF_BUFFER_SIZE:-1024}
 TRACEE_LISTEN_ADDR=http:/localhost:3366
 TRACEE_EVENTS_SINK_TIMEOUT=5
+TRACEE_BENCHMARK_OUTPUT_FILE=${TRACEE_BENCHMARK_OUTPUT_FILE:-""}
 
 # perf-buffer-size
 
-TRACEE_CACHE_PARAMS=()
+call_teardown=1
+tracee_cache_params=()
 if [[ "$TRACEE_CACHE_TYPE" == "mem" ]]; then
-	TRACEE_CACHE_PARAMS+=("--cache")
-	TRACEE_CACHE_PARAMS+=("cache-type=mem")
-	TRACEE_CACHE_PARAMS+=("--cache")
-	TRACEE_CACHE_PARAMS+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
+	tracee_cache_params+=("--cache")
+	tracee_cache_params+=("cache-type=mem")
+	tracee_cache_params+=("--cache")
+	tracee_cache_params+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
 else
-	TRACEE_CACHE_PARAMS+=("--cache")
-	TRACEE_CACHE_PARAMS+=("cache-type=hybrid")
-	TRACEE_CACHE_PARAMS+=("--cache")
-	TRACEE_CACHE_PARAMS+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
-	TRACEE_CACHE_PARAMS+=("--cache")
-	TRACEE_CACHE_PARAMS+=("disk-cache-size=$TRACEE_DISK_CACHE_SIZE")
+	tracee_cache_params+=("--cache")
+	tracee_cache_params+=("cache-type=hybrid")
+	tracee_cache_params+=("--cache")
+	tracee_cache_params+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
+	tracee_cache_params+=("--cache")
+	tracee_cache_params+=("disk-cache-size=$TRACEE_DISK_CACHE_SIZE")
 fi
 
-BENCHMARK_OUTPUT_FILE=""
+start_prometheus() {
+	perf_compose="$TRACEE_ROOT/performance/dashboard/docker-compose.yml"
+	docker-compose -f "$perf_compose" up -d
+}
 
 clear_prometheus() {
 	# curl -X POST -g "$PROMETHEUS_ADDR/api/v1/admin/tsdb/delete_series?match[]=tracee_ebpf_lostevents_total"
@@ -70,13 +73,6 @@ teardown() {
 	# clear_prometheus
 }
 
-wait_tracee() {
-	echo Waiting for tracee to start
-	while
-		! (curl -s "$TRACEE_LISTEN_ADDR/healthz" | grep -q "OK")
-	do sleep 1; done
-}
-
 start_tracee() {
 	echo Starting tracee container
 
@@ -84,20 +80,25 @@ start_tracee() {
 		-v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro \
 		-p 3366:3366 tracee:latest --scope container --healthz=true --metrics --output none "${tracee_cache_params[@]}" \
 		--perf-buffer-size=${TRACEE_PERF_BUFFER_SIZE}
+
+	echo Waiting for tracee to start
+	while
+		! (curl -s "$TRACEE_LISTEN_ADDR/healthz" | grep -q "OK")
+	do sleep 1; done
 }
 
 # Parse command line options
 # TODO: parametrize other dos options
 while [[ "$#" -gt 0 ]]; do
 	case $1 in
-	--no_teardown) _CALL_TEARDOWN=0 ;; # If no_teardown is provided, disable teardown
+	--no_teardown) call_teardown=0 ;; # If no_teardown is provided, disable teardown
 	--output)
 		shift
-		BENCHMARK_OUTPUT_FILE=$1
+		TRACEE_BENCHMARK_OUTPUT_FILE=$1
 		;;
 	--n_runs)
 		shift
-		_N_RUNS=$1
+		n_runs=$1
 		;;
 
 	*) echo "Unknown option: $1" ;; # Optional: handle unknown options
@@ -105,13 +106,15 @@ while [[ "$#" -gt 0 ]]; do
 	shift
 done
 
-start_dos() {
+run_dos() {
 	# TODO: add building of dos container
 	echo Starting dos container for $DOS_DURATION_SEC seconds
 
-	docker run --rm -d --name dos --cpus $DOS_CPU_LIMIT dos $DOS_N_FAKE_COMMANDS "$DOS_MALICIOUS_COMMAND" $DOS_SLEEP_DURATION_SEC
+	docker run -d --rm --name dos --cpus "$DOS_CPU_LIMIT" dos "$DOS_N_FAKE_COMMANDS" "$DOS_MALICIOUS_COMMAND" "$DOS_SLEEP_DURATION_SEC"
 
 	sleep $DOS_DURATION_SEC
+
+	docker kill dos 2>/dev/null || true
 }
 
 wait_tracee_sink() {
@@ -120,34 +123,34 @@ wait_tracee_sink() {
 }
 
 run_benchmark() {
-	TRACEE_BENCH_CMD="go run $SCRIPT_DIR/../../cmd/tracee-bench/main.go --single=true --output json"
+	TRACEE_BENCH_CMD="go run $TRACEE_ROOT/cmd/tracee-bench/main.go --single=true --output json"
 	$TRACEE_BENCH_CMD
 }
 
-run() {
+_main() {
 
-	[[ $_CALL_TEARDOWN -eq 1 ]] && teardown
+	[[ $call_teardown -eq 1 ]] && teardown
+
+	start_prometheus
+	# (docker ps | grep prometheus) || start_prometheus
 
 	tracee_is_running || start_tracee
 
-	wait_tracee
-
-	start_dos
+	run_dos
 
 	wait_tracee_sink
 
-	docker stop dos
+	# sudo sh -c "pidof dos | xargs kill"
 
-	if [ "$BENCHMARK_OUTPUT_FILE" != "" ]; then
-		run_benchmark >"$BENCHMARK_OUTPUT_FILE"
+	if [ "$TRACEE_BENCHMARK_OUTPUT_FILE" != "" ]; then
+		benchmark_dir=${TRACEE_BENCHMARK_OUTPUT_FILE%/*}
+		mkdir -p "$benchmark_dir"
+		run_benchmark >"$TRACEE_BENCHMARK_OUTPUT_FILE"
 	else
 		run_benchmark
 	fi
 
-	[[ $_CALL_TEARDOWN -eq 1 ]] && teardown
+	# [[ $call_teardown -eq 1 ]] && teardown
 }
 
-# echo Running DoS "$_N_RUNS" times
-for i in $(seq 1 $END); do
-	run
-done
+_main
