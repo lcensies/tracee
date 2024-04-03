@@ -3,84 +3,97 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 
+void run_mask_command(int n_iters)
+{
+    FILE *fp;
 
-void run_mask_command(int n_iters) {
-  FILE *fp;
-
-  // mask the real call
-  for (int i = 0; i < n_iters; i++) {
-    fp = fopen("/etc/passwd", "r");
-    fclose(fp);
-  }
+    // mask the real call
+    for (int i = 0; i < n_iters; i++) {
+        fp = fopen("/etc/passwd", "r");
+        fclose(fp);
+    }
 }
 
-struct timespec seconds_to_timespec(float sec) {
+struct timespec seconds_to_timespec(float sec)
+{
     struct timespec req;
 
-    req.tv_sec = (time_t)sec; // Extract seconds
-    req.tv_nsec = (long)((sec - req.tv_sec) * 1e9); // Extract nanoseconds
+    req.tv_sec = (time_t) sec;                       // Extract seconds
+    req.tv_nsec = (long) ((sec - req.tv_sec) * 1e9); // Extract nanoseconds
 
     return req;
 }
 
-void start_dos(int n_fake_syscalls, const char *real_command, float sleep_interval_sec) {
+void start_dos(int n_fake_syscalls, const char *real_command, float sleep_interval_sec)
+{
+    FILE *fpp;
+    char buf[1024];
+    struct timespec sleep_timespec = seconds_to_timespec(sleep_interval_sec);
 
-  FILE *fpp;
-  char buf[1024];
-  struct timespec sleep_timespec = seconds_to_timespec(sleep_interval_sec);
+    printf("N_FAKE_SYSCALLS: %d\n", n_fake_syscalls);
+    printf("REAL_COMMAND: %s\n", real_command);
+    printf("SLEEP_INTERVAL: %f\n", sleep_interval_sec);
 
-  printf("N_FAKE_SYSCALLS: %d\n", n_fake_syscalls);
-  printf("REAL_COMMAND: %s\n", real_command);
-  printf("SLEEP_INTERVAL: %f\n", sleep_interval_sec);
+    while (1) {
+        run_mask_command(n_fake_syscalls);
 
-  while (1) {
+        //-----------------Real call--------------------//
 
-    run_mask_command(n_fake_syscalls);
+        if ((fpp = popen(real_command, "r")) == NULL) {
+            printf("Error opening pipe!\n");
+            return;
+        }
 
-    //-----------------Real call--------------------//
+        while (fgets(buf, 1024, fpp) != NULL)
+            printf("OUTPUT: %s", buf);
 
-    if ((fpp = popen(real_command, "r")) == NULL) {
-      printf("Error opening pipe!\n");
-      return;
+        if (pclose(fpp)) {
+            printf("Command not found or exited with error status\n");
+            return;
+        }
+
+        run_mask_command(n_fake_syscalls);
+
+        nanosleep(&sleep_timespec, NULL);
     }
-
-    while (fgets(buf, 1024, fpp) != NULL)
-      printf("OUTPUT: %s", buf);
-
-    if (pclose(fpp)) {
-      printf("Command not found or exited with error status\n");
-      return;
-    }
-
-    run_mask_command(n_fake_syscalls);
-
-    nanosleep(&sleep_timespec, NULL);
-  }
 }
 
-void print_usage() {
-  printf("Usage: dos [N_FAKE_SYSCALLS] [REAL_CALL] [SLEEP_TIMEOUT]");
+void print_usage()
+{
+    printf("Usage: dos [N_FAKE_SYSCALLS] [REAL_CALL] [SLEEP_TIMEOUT]");
+}
+
+void timeout_handler(int sig)
+{
+    printf("DoS is timed out\n");
+    exit(EXIT_SUCCESS);
+}
+
+void setup_timeout(int timeout)
+{
+    signal(SIGALRM, timeout_handler);
+    alarm(timeout);
 }
 
 int main(int argc, char *argv[])
 {
-  char* real_command;
-  int iters;
-  float sleep_timeout;
+    char *real_command;
+    int iters;
+    float sleep_timeout;
 
-  printf("Argc: %d\n", argc);
-  if (argc != 4){
-    print_usage();
-    return EXIT_FAILURE;
-  }
+    setup_timeout(60);
 
-  iters = atoi(argv[1]);
-  real_command = argv[2];
-  sleep_timeout = atof(argv[3]);
+    printf("Argc: %d\n", argc);
+    if (argc != 4) {
+        print_usage();
+        return EXIT_FAILURE;
+    }
 
-  start_dos(iters, real_command, sleep_timeout);
+    iters = atoi(argv[1]);
+    real_command = argv[2];
+    // sleep_timeout = atof(argv[3]);
 
+    start_dos(iters, real_command, sleep_timeout);
 }
-
-

@@ -26,7 +26,11 @@ VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 echo "TRACEE_ROOT: $TRACEE_ROOT"
 
-cd "$TRACEE_ROOT" && vagrant reload
+# cd "$TRACEE_ROOT" && vagrant reload
+
+cd "$TRACEE_ROOT"
+# vagrant halt --force
+vagrant halt && vagrant up
 
 $BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
