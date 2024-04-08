@@ -85,15 +85,14 @@ int main(int argc, char *argv[])
 
     setup_timeout(60);
 
-    printf("Argc: %d\n", argc);
-    if (argc != 4) {
-        print_usage();
-        return EXIT_FAILURE;
-    }
+    iters = atoi(getenv("DOS_N_FAKE_COMMANDS"));
+    real_command = getenv("DOS_MALICIOUS_COMMAND");
+    sleep_timeout = atof(getenv("DOS_SLEEP_DURATION_SEC"));
 
-    iters = atoi(argv[1]);
-    real_command = argv[2];
-    // sleep_timeout = atof(argv[3]);
+    printf("Running dos with %d iterations, %f sleep timeout, %s hidden command\n",
+           iters,
+           sleep_timeout,
+           real_command);
 
     start_dos(iters, real_command, sleep_timeout);
 }

@@ -23,6 +23,7 @@ FROM debian:stable-slim AS dos
 WORKDIR app
 
 COPY --from=builder /app/build/dos dos
+COPY dos_entrypoint.sh /dos_entrypoint.sh
 
-ENTRYPOINT ["/app/dos"]
+ENTRYPOINT ["/dos_entrypoint.sh"]
 
