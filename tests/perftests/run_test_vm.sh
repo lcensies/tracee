@@ -26,15 +26,13 @@ VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 echo "TRACEE_ROOT: $TRACEE_ROOT"
 
-# cd "$TRACEE_ROOT" && vagrant reload
-
 cd "$TRACEE_ROOT"
 # vagrant halt --force
 vagrant halt && vagrant up
 
 $BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
-# $VM_SSH_CMD docker image ls | grep dos ||
+# $VM_SSH_CMD docker image ls | grep dos
 # Build DoS container
 $VM_SSH_CMD make -f builder/Makefile.dos-container
 
@@ -46,8 +44,17 @@ $VM_SSH_CMD tests/perftests/dos_test.sh
 
 echo VM_SSH_ROOT: $VM_SSH_ROOT
 echo TRACEE_BENCHMARK_OUTPUT_FILE: "$TRACEE_BENCHMARK_OUTPUT_FILE"
+echo TRACEE_LOG_FILE: "$TRACEE_LOG_FILE"
 
+# Copy benchmark results and tracee logs to host
+# TODO: change to rsync
 $VM_SCP_CMD "$VM_SSH_ROOT:$TRACEE_BENCHMARK_OUTPUT_FILE" "$TRACEE_BENCHMARK_OUTPUT_FILE"
+
+# note that running tracee on host might break permissions
+# TODO: fix permissions
+$VM_SSH_CMD sudo cp "$TRACEE_LOG_FILE" /tmp/tracee.log
+$VM_SSH_CMD sudo chown vagrant:vagrant /tmp/tracee.log
+$VM_SCP_CMD "$VM_SSH_ROOT:/tmp/tracee.log" "$TRACEE_LOG_FILE"
 
 cat "$TRACEE_BENCHMARK_OUTPUT_FILE"
 
