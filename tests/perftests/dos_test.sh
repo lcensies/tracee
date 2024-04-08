@@ -1,28 +1,28 @@
 #!/bin/bash -ex
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-
 PROMETHEUS_ADDR=http://localhost:9090
 
 DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.016}
 DOS_DURATION_SEC=60
-DOS_APP=/app/dos
+DOS_CMD=/app/dos
 DOS_N_FAKE_COMMANDS="2000"
 DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
+# DOS_MALICIOUS_COMMAND='touch /tmp/counter && date && a="$(cat /tmp/counter)"; echo "$a +1" | bc > /tmp/counter'
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-".8"}
-
+# DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
-TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-2048}
+TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-4096}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
 TRACEE_PERF_BUFFER_SIZE=${TRACEE_PERF_BUFFER_SIZE:-1024}
 TRACEE_LISTEN_ADDR=http:/localhost:3366
-TRACEE_EVENTS_SINK_TIMEOUT=5
+TRACEE_EVENTS_SINK_TIMEOUT=${TRACEE_EVENTS_SINK_TIMEOUT:-5}
 TRACEE_BENCHMARK_OUTPUT_FILE=${TRACEE_BENCHMARK_OUTPUT_FILE:-""}
+TRACEE_LOG_FILE=${TRACEE_LOG_FILE:-/tmp/tracee/tracee.log}
+TRACEE_EXE=/tracee/tracee-ebpf
 
-# perf-buffer-size
+call_teardown=0
 
-call_teardown=1
 tracee_cache_params=()
 if [[ "$TRACEE_CACHE_TYPE" == "mem" ]]; then
 	tracee_cache_params+=("--cache")
@@ -70,16 +70,18 @@ teardown() {
 		sleep 0.1
 	done
 
-	# clear_prometheus
+	clear_prometheus
 }
 
 start_tracee() {
 	echo Starting tracee container
 
-	docker run --name tracee -d --rm --pid=host --cgroupns=host --privileged \
-		-v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro \
-		-p 3366:3366 tracee:latest --scope container --healthz=true --metrics --output none "${tracee_cache_params[@]}" \
-		--perf-buffer-size=${TRACEE_PERF_BUFFER_SIZE}
+	# TODO: fix logging to file
+	# --log-opt max-size=400m
+	docker run --name tracee -d --rm --pid=host --cgroupns=host --privileged -e TRACEE_EXE=$TRACEE_EXE -v /run/docker.sock:/var/run/docker.sock \
+		-v /tmp/tracee:/tmp/tracee -v /boot:/boot -v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro \
+		-p 3366:3366 tracee:latest --scope container --healthz=true --metrics --output json --output out-file:${TRACEE_LOG_FILE} "${tracee_cache_params[@]}" \
+		--perf-buffer-size="${TRACEE_PERF_BUFFER_SIZE}"
 
 	echo Waiting for tracee to start
 	while
@@ -87,30 +89,16 @@ start_tracee() {
 	do sleep 1; done
 }
 
-# Parse command line options
-# TODO: parametrize other dos options
-while [[ "$#" -gt 0 ]]; do
-	case $1 in
-	--no_teardown) call_teardown=0 ;; # If no_teardown is provided, disable teardown
-	--output)
-		shift
-		TRACEE_BENCHMARK_OUTPUT_FILE=$1
-		;;
-	--n_runs)
-		shift
-		n_runs=$1
-		;;
-
-	*) echo "Unknown option: $1" ;; # Optional: handle unknown options
-	esac
-	shift
-done
-
 run_dos() {
 	# TODO: add building of dos container
 	echo Starting dos container for $DOS_DURATION_SEC seconds
-
-	docker run -d --rm --name dos --cpus "$DOS_CPU_LIMIT" dos "$DOS_N_FAKE_COMMANDS" "$DOS_MALICIOUS_COMMAND" "$DOS_SLEEP_DURATION_SEC"
+	# dos "$DOS_N_FAKE_COMMANDS" "$DOS_MALICIOUS_COMMAND" "$DOS_SLEEP_DURATION_SEC"
+	# --cpus "$DOS_CPU_LIMIT"
+	docker run -d --rm --name dos \
+		-e DOS_CMD="$DOS_CMD" \
+		-e DOS_N_FAKE_COMMANDS="$DOS_N_FAKE_COMMANDS" \
+		-e DOS_MALICIOUS_COMMAND="$DOS_MALICIOUS_COMMAND" \
+		-e DOS_SLEEP_DURATION_SEC="$DOS_SLEEP_DURATION_SEC" dos
 
 	sleep $DOS_DURATION_SEC
 
@@ -119,7 +107,7 @@ run_dos() {
 
 wait_tracee_sink() {
 	echo Waiting for tracee to sink events
-	sleep $TRACEE_EVENTS_SINK_TIMEOUT
+	sleep "$TRACEE_EVENTS_SINK_TIMEOUT"
 }
 
 run_benchmark() {
@@ -129,10 +117,10 @@ run_benchmark() {
 
 _main() {
 
-	[[ $call_teardown -eq 1 ]] && teardown
+	# [[ $call_teardown -eq 1 ]] && teardown
 
 	start_prometheus
-	# (docker ps | grep prometheus) || start_prometheus
+	clear_prometheus
 
 	tracee_is_running || start_tracee
 
@@ -140,7 +128,7 @@ _main() {
 
 	wait_tracee_sink
 
-	# sudo sh -c "pidof dos | xargs kill"
+	docker stop tracee
 
 	if [ "$TRACEE_BENCHMARK_OUTPUT_FILE" != "" ]; then
 		benchmark_dir=${TRACEE_BENCHMARK_OUTPUT_FILE%/*}
