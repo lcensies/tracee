@@ -6,66 +6,97 @@ import subprocess
 import json
 import numpy as np
 from typing import Dict, List
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from pathlib import Path
 from time import sleep
 
-DOS_N_RUNS = 2
-DOS_RUN_INTERVAL_SEC = 120
+# Note that TRACEE_PERF_BUFFER_SIZE defines size of generic
+# events buffer while file writes and net events are stored
+# in separate ones 
 
-OUTPUT_DIR = "/tmp/tracee/dos_test"
 
+OUTPUT_DIR = "/tmp/dos_test"
+DOS_N_RUNS = 1
+STABILIZIZATION_SLEEP_SECONDS = 120
 
 # Define various grids based on which parameter do we want to verify
 # grid_parameters = [{"TRACEE_MEM_CACHE_SIZE": "2048"}, {"TRACEE_MEM_CACHE_SIZE": "4096"}]
 GRID_SLEEP = [
-    {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.0185"},
-    # {"TRACEE_MEM_CACHE_SIZE": "2048", "DOS_SLEEP_DURATION_SEC": "0.02"},
-    # {"TRACEE_MEM_CACHE_SIZE": "2048", "DOS_SLEEP_DURATION_SEC": "0.023"},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.0185"},
+    {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.016"},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.025"},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.03"},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.04"},
 ]
 
-GRID_PERF_BUF_SIZE = [
+DEFAULT_PARAMS = {"TRACEE_MEM_CACHE_SIZE": "4096", "DOS_SLEEP_DURATION_SEC": "0.016"}
+
+GRID_DOS_CPU_LIMIT = [
+        # {"DOS_CPU_LIMIT": "1"}
+        {"DOS_CPU_LIMIT": "0.9"},
+        {"DOS_CPU_LIMIT":  "0.8"},
+        # {"DOS_CPU_LIMIT": "0.7"}
+]
+
+# GRID_PERF_BUF_SIZE = [
     # {"TRACEE_MEM_CACHE_SIZE": "2048", "TRACEE_PERF_BUFFER_SIZE": "1024"},
     # {"TRACEE_MEM_CACHE_SIZE": "2048", "TRACEE_PERF_BUFFER_SIZE": "4096"},
-    {"TRACEE_MEM_CACHE_SIZE": "4096", "TRACEE_PERF_BUFFER_SIZE": "8192", "DOS_SLEEP_DURATION_SEC": "0.02"},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "TRACEE_PERF_BUFFER_SIZE": "8192", },
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "TRACEE_PERF_BUFFER_SIZE": "16384",},
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "TRACEE_PERF_BUFFER_SIZE": "32768", },
+    # {"TRACEE_MEM_CACHE_SIZE": "4096", "TRACEE_PERF_BUFFER_SIZE": "65536", },
     # {"TRACEE_MEM_CACHE_SIZE": "2048", "TRACEE_PERF_BUFFER_SIZE": "16384"},
     # {"TRACEE_MEM_CACHE_SIZE": "2048", "TRACEE_PERF_BUFFER_SIZE": "65536"},
-]
+# ]
+
+grid = [x | DEFAULT_PARAMS for x in GRID_SLEEP]
 
 
-def load_parameters_from_json(output_file):
-    with open(output_file, "r") as file:
+
+def load_json(input_file: str) -> Dict:
+    with open(input_file, "r") as file:
         data = json.load(file)
     return data
 
+def save_json(obj: Dict, output_file: str):
+    with open(output_file, "w") as f:
+        json.dump(obj, f)
 
-def call_dos(params: List[dict], n_runs: int = 1) -> List[Dict]:
+def call_dos(params: List[dict], n_runs: int = 1) -> List[List[Dict]]:
     dos_launcher = Path(__file__).parent.joinpath("run_test_vm.sh")
 
-    results: List[Dict] = []
+    results: List[List[Dict]] = []
+    run_idx: int = 0
     assert len(params) > 0
-    param_dict = params[0]
-    # for param_dict in params:
-    print(f"Calling dos with params: {param_dict}")
-    for i in range(n_runs):
-        output_file: str = f"{OUTPUT_DIR}/dos_{i}.json"
+    for param_dict in params:
+        local_res: List[Dict] = []
+        print(f"Calling dos with params: {param_dict}")
+        for i in range(n_runs):
+            input_params_file: str = f"{OUTPUT_DIR}/input_{run_idx}.json"
+            output_file: str = f"{OUTPUT_DIR}/dos_{run_idx}.json"
 
-        custom_env = os.environ.copy()
-        custom_env |= param_dict
-        custom_env |= {"TRACEE_BENCHMARK_OUTPUT_FILE": output_file}
+            custom_env = os.environ.copy()
+            custom_env |= param_dict
+            custom_env |= {"TRACEE_BENCHMARK_OUTPUT_FILE": output_file, "TRACEE_LOG_FILE": f"/tmp/tracee/tracee_{run_idx}.log"}
 
-        print(f"DoS iterations: {i+1}/{n_runs}")
-        subprocess.run(
-            [str(dos_launcher)],
-            check=True,
-            env=custom_env,
-        )
+            print(f"DoS iterations: {i+1}/{n_runs}")
+            subprocess.run(
+                [str(dos_launcher)],
+                check=True,
+                env=custom_env,
+            )
 
-        results.append(load_parameters_from_json(output_file))
+            local_res.append(load_json(output_file))
+            save_json(param_dict, input_params_file)
+            run_idx += 1
+        
+            print(f"Sleeping {STABILIZIZATION_SLEEP_SECONDS} seconds to stabilize the environment")
+            sleep(STABILIZIZATION_SLEEP_SECONDS)
 
-        # os.remove(output_file)
-        # print(f"Sleeping for {DOS_RUN_INTERVAL_SEC} seconds to stabilize environment")
-        # sleep(DOS_RUN_INTERVAL_SEC)
+        results.append(local_res)
+
+
+            # os.remove(output_file)
 
     return results
 
@@ -76,45 +107,33 @@ def get_means(test_results):
         metric: np.array([res[metric] for res in test_results]).mean()
         for metric in metrics
     }
-    # {
-    #     "avgEbpfRate": 36.49090909090909,
-    #     "avgLostEventsRate": 9029.580526060605,
-    #     "totalEvents": 3002886,
-    #     "lostEvents": 2987907,
-    #     "lostTotalRatio": 0.995011798649699,
-    # }
     return means
-
-
-# def generate_and_display_plot(parameters, results):
-#     plt.figure(figsize=(10, 6))
-#     plt.plot(parameters, results, marker="o", linestyle="-", color="b")
-#     plt.title("Dependency between Grid Parameter and Output")
-#     plt.xlabel("Grid Parameter")
-#     plt.ylabel("Output from JSON")
-#     plt.grid(True)
-#     plt.show()
-
-
-def print_dependency(params, results, param_of_interest):
-    for p, r in zip(params, results):
-        print(p)
-        print(r)
-        print(
-            f"{param_of_interest}: {p[param_of_interest]}, events: {r['totalEvents']}, lost/total: {r['lostTotalRatio']}"
-        )
 
 
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
-grid = GRID_PERF_BUF_SIZE
 test_results = call_dos(grid, n_runs=DOS_N_RUNS)
 
-means = get_means(test_results)
+# test_results = [
+# [
+# {"avgEbpfRate":4.376228627992081,"avgLostEventsRate":142056.875,"totalEvents":40432085,"lostEvents":40426892,"lostTotalRatio":0.9998715623990205},
+# {'avgEbpfRate': 0, 'avgLostEventsRate': 102410.03730227992, 'totalEvents': 17635336, 'lostEvents': 17635144, 'lostTotalRatio': 0.9999891127676842},
+# {'avgEbpfRate': 3.478817202151269, 'avgLostEventsRate': 153190.58674284074, 'totalEvents': 41278188, 'lostEvents': 41273289, 'lostTotalRatio': 0.9998813174648074},
+# {'avgEbpfRate': 4.376228627992081, 'avgLostEventsRate': 142056.875, 'totalEvents': 40432085, 'lostEvents': 40426892, 'lostTotalRatio': 0.9998715623990205}
+# ]
+# ]
 
 
-print(f"Test results means: {means}")
+for inp, res in zip(grid, test_results):
+    print(inp)
+    print()
+    for r in res:
+        print(res)
 
-print_dependency(grid, test_results, "TRACEE_PERF_BUFFER_SIZE")
+    means = get_means(res)
+
+    print(f"\nTest results means: {means}\n")
+    print(f"\n{'-'*37}\n")
+
 
 # rmtree(OUTPUT_DIR)
