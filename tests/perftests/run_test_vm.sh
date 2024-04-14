@@ -49,10 +49,11 @@ echo TRACEE_LOG_FILE: "$TRACEE_LOG_FILE"
 # Copy benchmark results and tracee logs to host
 # TODO: change to rsync
 $VM_SCP_CMD "$VM_SSH_ROOT:$TRACEE_BENCHMARK_OUTPUT_FILE" "$TRACEE_BENCHMARK_OUTPUT_FILE"
+$VM_SSH_CMD sudo chown vagrant:vagrant "$TRACEE_BENCHMARK_OUTPUT_FILE"
 
 # note that running tracee on host might break permissions
 # TODO: fix permissions
-$VM_SSH_CMD sudo cp "$TRACEE_LOG_FILE" /tmp/tracee.log
+$VM_SSH_CMD sudo cp /tmp/tracee/tracee.log /tmp/tracee.log
 $VM_SSH_CMD sudo chown vagrant:vagrant /tmp/tracee.log
 $VM_SCP_CMD "$VM_SSH_ROOT:/tmp/tracee.log" "$TRACEE_LOG_FILE"
 

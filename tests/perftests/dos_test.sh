@@ -2,13 +2,13 @@
 
 PROMETHEUS_ADDR=http://localhost:9090
 
-DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.016}
+DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.001}
 DOS_DURATION_SEC=60
 DOS_CMD=/app/dos
 DOS_N_FAKE_COMMANDS="2000"
 DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
 # DOS_MALICIOUS_COMMAND='touch /tmp/counter && date && a="$(cat /tmp/counter)"; echo "$a +1" | bc > /tmp/counter'
-DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-".8"}
+DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-"1"}
 # DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
@@ -20,6 +20,7 @@ TRACEE_EVENTS_SINK_TIMEOUT=${TRACEE_EVENTS_SINK_TIMEOUT:-5}
 TRACEE_BENCHMARK_OUTPUT_FILE=${TRACEE_BENCHMARK_OUTPUT_FILE:-""}
 TRACEE_LOG_FILE=${TRACEE_LOG_FILE:-/tmp/tracee/tracee.log}
 TRACEE_EXE=/tracee/tracee-ebpf
+TRACEE_EVENTS=security_file_open
 
 call_teardown=0
 
@@ -49,7 +50,7 @@ clear_prometheus() {
 
 	# Set the match[] argument to "{}" to match all metrics
 	MATCHERS='{}'
-	curl -X POST "$PROMETHEUS_ADDR" -H "Content-Type: application/json" --data "{\"match[]\":[\"$MATCHERS\"]}"
+	curl -X POST "$PROMETHEUS_ADDR/api/v1/admin/tsdb/delete_series" -H "Content-Type: application/json" --data "{\"match[]\":[\"$MATCHERS\"]}"
 
 }
 
@@ -78,10 +79,14 @@ start_tracee() {
 
 	# TODO: fix logging to file
 	# --log-opt max-size=400m
-	docker run --name tracee -d --rm --pid=host --cgroupns=host --privileged -e TRACEE_EXE=$TRACEE_EXE -v /run/docker.sock:/var/run/docker.sock \
-		-v /tmp/tracee:/tmp/tracee -v /boot:/boot -v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro \
-		-p 3366:3366 tracee:latest --scope container --healthz=true --metrics --output json --output out-file:${TRACEE_LOG_FILE} "${tracee_cache_params[@]}" \
-		--perf-buffer-size="${TRACEE_PERF_BUFFER_SIZE}"
+	# --scope container
+
+	# docker run --name tracee -d --rm --pid=host --cgroupns=host --privileged -e TRACEE_EXE=$TRACEE_EXE -v /run/docker.sock:/var/run/docker.sock \
+	# 	-v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -v /boot:/boot -v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro -e "${TRACEE_EVENTS}" \
+	# 	-p 3366:3366 tracee:latest --healthz=true --metrics --output json --output out-file:${TRACEE_LOG_FILE} "${tracee_cache_params[@]}" \
+	# 	--perf-buffer-size="${TRACEE_PERF_BUFFER_SIZE}"
+
+	docker run --name tracee -e TRACEE_EXE=${TRACEE_EXE} -d --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -p 3366:3366 tracee:latest --metrics --healthz=true --output json --output out-file:/tmp/tracee/tracee.log -e security_file_open #open,openat
 
 	echo Waiting for tracee to start
 	while
@@ -132,6 +137,7 @@ _main() {
 
 	if [ "$TRACEE_BENCHMARK_OUTPUT_FILE" != "" ]; then
 		benchmark_dir=${TRACEE_BENCHMARK_OUTPUT_FILE%/*}
+		sudo rm -r "$benchmark_dir" 2>/dev/null || :
 		mkdir -p "$benchmark_dir"
 		run_benchmark >"$TRACEE_BENCHMARK_OUTPUT_FILE"
 	else

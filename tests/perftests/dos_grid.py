@@ -17,7 +17,7 @@ from time import sleep
 
 OUTPUT_DIR = "/tmp/dos_test"
 DOS_N_RUNS = 1
-STABILIZIZATION_SLEEP_SECONDS = 120
+# STABILIZIZATION_SLEEP_SECONDS = 120
 
 # Define various grids based on which parameter do we want to verify
 # grid_parameters = [{"TRACEE_MEM_CACHE_SIZE": "2048"}, {"TRACEE_MEM_CACHE_SIZE": "4096"}]
@@ -77,7 +77,7 @@ def call_dos(params: List[dict], n_runs: int = 1) -> List[List[Dict]]:
 
             custom_env = os.environ.copy()
             custom_env |= param_dict
-            custom_env |= {"TRACEE_BENCHMARK_OUTPUT_FILE": output_file, "TRACEE_LOG_FILE": f"/tmp/tracee/tracee_{run_idx}.log"}
+            custom_env |= {"TRACEE_BENCHMARK_OUTPUT_FILE": output_file, "TRACEE_LOG_FILE": f"{OUTPUT_DIR}/tracee_{run_idx}.log"}
 
             print(f"DoS iterations: {i+1}/{n_runs}")
             subprocess.run(
@@ -90,8 +90,8 @@ def call_dos(params: List[dict], n_runs: int = 1) -> List[List[Dict]]:
             save_json(param_dict, input_params_file)
             run_idx += 1
         
-            print(f"Sleeping {STABILIZIZATION_SLEEP_SECONDS} seconds to stabilize the environment")
-            sleep(STABILIZIZATION_SLEEP_SECONDS)
+            # print(f"Sleeping {STABILIZIZATION_SLEEP_SECONDS} seconds to stabilize the environment")
+            # sleep(STABILIZIZATION_SLEEP_SECONDS)
 
         results.append(local_res)
 
