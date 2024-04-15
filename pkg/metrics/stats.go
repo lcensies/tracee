@@ -95,7 +95,7 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Help:      "number of cached events",
 	}, func() float64 {
 		cache := traceeConfig.Cache
-		cacheSize := 0.0
+		cacheSize := -1.0
 		if cache != nil {
 			cacheSize = float64(cache.Size())
 		}
@@ -113,13 +113,31 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Help:      "capacity of the cache in events",
 	}, func() float64 {
 		cache := traceeConfig.Cache
-		cacheCapacity := 0.0
+		cacheCapacity := -1.0
 
 		if cache != nil {
 			cacheCapacity = float64(cache.Capacity())
 		}
 
 		return cacheCapacity
+	}))
+	if err != nil {
+		return errfmt.WrapError(err)
+	}
+
+	err = prometheus.Register(prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Namespace: "tracee_ebpf",
+		Name:      "cache_load",
+		Help:      "cache load factor in percents",
+	}, func() float64 {
+		cache := traceeConfig.Cache
+		cacheLoad := 0.0
+
+		if cache != nil {
+			cacheLoad = float64(cache.Size()) / float64(cache.Capacity())
+		}
+
+		return cacheLoad
 	}))
 	if err != nil {
 		return errfmt.WrapError(err)

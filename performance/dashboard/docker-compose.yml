@@ -5,6 +5,7 @@ volumes:
 services:
   node-exporter:
     image: prom/node-exporter:latest
+    pull_policy: if_not_present
     container_name: tracee-node
     restart: unless-stopped
     volumes:
@@ -36,6 +37,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: tracee-prometheus
+    pull_policy: if_not_present
     restart: unless-stopped
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
@@ -53,6 +55,7 @@ services:
   grafana:
     image: grafana/grafana:main
     container_name: tracee-grafana
+    pull_policy: if_not_present
     restart: unless-stopped
     volumes:
       - ./provisioning:/etc/grafana/provisioning
@@ -70,14 +73,14 @@ services:
     expose:
       - 3000
     network_mode: host
-  pyroscope:
-    image: pyroscope/pyroscope:latest
-    container_name: tracee-pyroscope
-    restart: unless-stopped
-    environment:
-      - PYROSCOPE_LOG_LEVEL=info
-    expose:
-      - 4040
-    command:
-      - server
-    network_mode: host
+  # pyroscope:
+  #   image: pyroscope/pyroscope:latest
+  #   container_name: tracee-pyroscope
+  #   restart: unless-stopped
+  #   environment:
+  #     - PYROSCOPE_LOG_LEVEL=info
+  #   expose:
+  #     - 4040
+  #   command:
+  #     - server
+  #   network_mode: host

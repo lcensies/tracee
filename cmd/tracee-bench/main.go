@@ -23,6 +23,8 @@ const (
 	periodFlag            = "periodLostTotalRatio"
 	outputFlag            = "output"
 	singleRunFlag         = "single"
+	startTimeFlag         = "start"
+	endTimeFlag           = "end"
 )
 
 type measurement struct {
@@ -31,6 +33,8 @@ type measurement struct {
 	TotalEvents       int     `json:"totalEvents"`
 	LostEvents        int     `json:"lostEvents"`
 	LostTotalRatio    float64 `json:"lostTotalRatio"`
+	CacheLoad         float64 `json:"cacheLoad"`
+	CachedEvents      int     `json:"cachedEvents"`
 }
 
 func (m measurement) Print() {
@@ -39,6 +43,8 @@ func (m measurement) Print() {
 	fmt.Printf("EventsLost/Sec: %f\n", m.AvgLostEventsRate)
 	fmt.Printf("Events Total:    %d\n", m.TotalEvents)
 	fmt.Printf("Events Lost:    %d\n", m.LostEvents)
+	fmt.Printf("Events cached:  %v\n", m.CachedEvents)
+	fmt.Printf("Cache load percentage:  %v\n", m.CacheLoad)
 	fmt.Printf("Lost/Total radio:  %v\n", m.LostTotalRatio)
 	fmt.Println("===============================================")
 }
@@ -79,6 +85,18 @@ func main() {
 				Name:  singleRunFlag,
 				Usage: "fetch metrics once instead of periodic polling",
 				Value: false,
+			},
+			&cli.TimestampFlag{
+				Name:   startTimeFlag,
+				Usage:  "start timestamp to fetch metrics",
+				Value:  cli.NewTimestamp(time.Now().Add(time.Duration(-60) * time.Second)),
+				Layout: time.RFC3339,
+			},
+			&cli.TimestampFlag{
+				Name:   endTimeFlag,
+				Usage:  "end timestamp to fetch metrics",
+				Value:  cli.NewTimestamp(time.Now()),
+				Layout: time.RFC3339,
 			},
 		},
 		Action: func(ctx *cli.Context) error {
@@ -137,6 +155,8 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		lostoverall  = "lost_events"
 		total        = "total_events"
 		losttototal  = "lost_to_total"
+		cached       = "events_cached"
+		cacheload    = "cache_load"
 	)
 	queries := map[string]struct {
 		queryName string
@@ -153,15 +173,23 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		// TODO: parametrize whether to capture only last minute for liot
 		lostoverall: {
 			queryName: "lost events",
-			query:     "sum_over_time(tracee_ebpf_lostevents_total[1m])",
+			query:     "sum_over_time(tracee_ebpf_lostevents_total[1h])",
 		},
 		total: {
 			queryName: "captured events",
-			query:     "sum_over_time(tracee_ebpf_events_total[1m]) + sum_over_time(tracee_ebpf_lostevents_total[1m])",
+			query:     "sum_over_time(tracee_ebpf_events_total[1h]) + sum_over_time(tracee_ebpf_lostevents_total[1h])",
 		},
 		losttototal: {
 			queryName: "lost to total events ratio",
-			query:     "sum_over_time(tracee_ebpf_lostevents_total[1m]) / (sum_over_time(tracee_ebpf_lostevents_total[1m]) + sum_over_time(tracee_ebpf_events_total[1m]))",
+			query:     "sum_over_time(tracee_ebpf_lostevents_total[1h]) / (sum_over_time(tracee_ebpf_lostevents_total[1h]) + sum_over_time(tracee_ebpf_events_total[1h]))",
+		},
+		cached: {
+			queryName: "cached_events",
+			query:     "max_over_time(tracee_ebpf_events_cached[5s])",
+		},
+		cacheload: {
+			queryName: "cache_load",
+			query:     "max_over_time(tracee_ebpf_cache_load[5s])",
 		},
 	}
 
@@ -194,6 +222,10 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 				measurement.TotalEvents = int(val)
 			case losttototal:
 				measurement.LostTotalRatio = float64(val)
+			case cached:
+				measurement.CachedEvents = int(val)
+			case cacheload:
+				measurement.CacheLoad = float64(val)
 			}
 		}(field, query.queryName, query.query)
 	}
