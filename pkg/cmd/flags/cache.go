@@ -67,12 +67,12 @@ func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
 		case "disk-cache-size":
 			if !cacheTypeHybrid {
 				return nil, errfmt.Errorf(
-					"you need to specify cache-type=hybrid before setting mem-cache-size",
+					"you need to specify cache-type=hybrid before setting disk-cache-size",
 				)
 			}
 			eventsCacheDiskSizeMb, err = strconv.Atoi(value)
 			if err != nil {
-				return nil, errfmt.Errorf("could not parse mem-cache-size value: %v", err)
+				return nil, errfmt.Errorf("could not parse disk-cache-size value: %v", err)
 			}
 		default:
 			return nil, errfmt.Errorf("unrecognized cache option format: %s", o)
