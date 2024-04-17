@@ -128,6 +128,7 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 
 	cache, err := flags.PrepareCache(cacheFlags)
 	if err != nil {
+		logger.Debugw("cache - failed to create cache config")
 		return runner, err
 	}
 
@@ -351,6 +352,3 @@ func GetTraceeRunner(c *cobra.Command, version string) (cmd.Runner, error) {
 
 	return runner, nil
 }
-
-
-

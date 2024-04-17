@@ -21,7 +21,7 @@ type Config struct {
 	Capture            *CaptureConfig
 	Capabilities       *CapabilitiesConfig
 	Output             *OutputConfig
-	Cache              queue.CacheConfig
+	Cache              *queue.CacheConfig
 	ProcTree           proctree.ProcTreeConfig
 	PerfBufferSize     int
 	BlobPerfBufferSize int
@@ -69,7 +69,10 @@ func (c Config) Validate() error {
 	}
 	for _, filter := range c.Capture.FileWrite.PathFilter {
 		if len(filter) > 50 {
-			return errfmt.Errorf("the length of a path filter is limited to 50 characters: %s", filter)
+			return errfmt.Errorf(
+				"the length of a path filter is limited to 50 characters: %s",
+				filter,
+			)
 		}
 	}
 	if len(c.Capture.FileRead.PathFilter) > 3 {
@@ -77,7 +80,10 @@ func (c Config) Validate() error {
 	}
 	for _, filter := range c.Capture.FileWrite.PathFilter {
 		if len(filter) > 50 {
-			return errfmt.Errorf("the length of a path filter is limited to 50 characters: %s", filter)
+			return errfmt.Errorf(
+				"the length of a path filter is limited to 50 characters: %s",
+				filter,
+			)
 		}
 	}
 

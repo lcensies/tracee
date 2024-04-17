@@ -9,7 +9,7 @@ import (
 )
 
 // this usecase implements EventQueue interface with a memory stored queue (FIFO)
-type eventQueueMem struct {
+type eventQueueMem[T trace.Event | []byte] struct {
 	mutex                *sync.Mutex
 	cond                 *sync.Cond
 	cache                *list.List
@@ -18,8 +18,8 @@ type eventQueueMem struct {
 	verbose              string
 }
 
-func NewEventQueueMem(queueSizeMb int) CacheConfig {
-	q := &eventQueueMem{
+func NewEventQueueMem[T trace.Event | []byte](queueSizeMb int) *eventQueueMem[T] {
+	q := &eventQueueMem[T]{
 		eventsCacheMemSizeMB: queueSizeMb,
 	}
 	q.setup()
@@ -27,11 +27,11 @@ func NewEventQueueMem(queueSizeMb int) CacheConfig {
 	return q
 }
 
-func (q *eventQueueMem) String() string {
+func (q *eventQueueMem[T]) String() string {
 	return q.verbose
 }
 
-func (q *eventQueueMem) setup() {
+func (q *eventQueueMem[T]) setup() {
 	q.mutex = new(sync.Mutex)
 	q.cond = sync.NewCond(q.mutex)
 
@@ -41,7 +41,7 @@ func (q *eventQueueMem) setup() {
 }
 
 // Enqueue pushes an event into the queue (may block until queue is available)
-func (q *eventQueueMem) Enqueue(evt *trace.Event) {
+func (q *eventQueueMem[T]) Enqueue(evt *T) {
 	q.cond.L.Lock()
 	// enqueue waits for de-queuing if cache is full (using >= instead of == to be in the safe side...)
 	for q.cache.Len() >= q.maxAmountOfEvents {
@@ -56,7 +56,7 @@ func (q *eventQueueMem) Enqueue(evt *trace.Event) {
 }
 
 // Dequeue pops an event from the queue
-func (q *eventQueueMem) Dequeue() *trace.Event {
+func (q *eventQueueMem[T]) Dequeue() *T {
 	q.cond.L.Lock()
 
 	// dequeue waits for en-queueing if cache is empty
@@ -65,7 +65,7 @@ func (q *eventQueueMem) Dequeue() *trace.Event {
 	}
 
 	e := q.cache.Front()
-	event, ok := e.Value.(trace.Event)
+	event, ok := e.Value.(T)
 	if !ok {
 		q.cond.L.Unlock()
 		return nil
@@ -77,18 +77,18 @@ func (q *eventQueueMem) Dequeue() *trace.Event {
 	return &event
 }
 
-func (q *eventQueueMem) Size() int {
+func (q *eventQueueMem[T]) Size() int {
 	return q.cache.Len()
 }
 
-func (q *eventQueueMem) Capacity() int {
+func (q *eventQueueMem[T]) Capacity() int {
 	// TODO: consider using SizeUnsafe()
 	return q.maxAmountOfEvents
 }
 
 // getQueueSizeInEvents returns size of the fifo queue, in # of events, based on
 // the host size
-func (q *eventQueueMem) getQueueSizeInEvents() int {
+func (q *eventQueueMem[T]) getQueueSizeInEvents() int {
 	// eventSize is the memory footprint per event in bytes. This is NOT the
 	// size of a single event, but the overall impact in memory consumption to
 	// each cached event (defined by experimentation)
@@ -127,6 +127,6 @@ func (q *eventQueueMem) getQueueSizeInEvents() int {
 	return amountOfEvents(gbToMB(4))
 }
 
-func (q *eventQueueMem) Teardown() error {
+func (q *eventQueueMem[T]) Teardown() error {
 	return nil
 }

@@ -132,6 +132,7 @@ type CacheConfig struct {
 	Type     string `mapstructure:"type"`
 	Size     int    `mapstructure:"size"`
 	DiskSize int    `mapstructure:"disk-size"`
+	Stage    string `mapstructure:"stage"`
 }
 
 func (c *CacheConfig) flags() []string {
@@ -145,6 +146,9 @@ func (c *CacheConfig) flags() []string {
 	}
 	if c.DiskSize != 0 {
 		flags = append(flags, fmt.Sprintf("disk-cache-size=%d", c.Size))
+	}
+	if c.Stage != "" {
+		flags = append(flags, fmt.Sprintf("cache-stage=%s", c.Stage))
 	}
 
 	return flags

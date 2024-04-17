@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aquasecurity/tracee/pkg/events/queue"
+	"github.com/aquasecurity/tracee/types/trace"
 )
 
 func TestPrepareCache(t *testing.T) {
@@ -15,7 +16,7 @@ func TestPrepareCache(t *testing.T) {
 	testCases := []struct {
 		testName      string
 		cacheSlice    []string
-		expectedCache queue.CacheConfig
+		expectedCache *queue.CacheConfig
 		expectedError error
 	}{
 		{
@@ -40,7 +41,7 @@ func TestPrepareCache(t *testing.T) {
 		{
 			testName:      "cache-type=mem",
 			cacheSlice:    []string{"cache-type=mem"},
-			expectedCache: queue.NewEventQueueMem(0),
+			expectedCache: queue.NewDefaultCache(queue.NewEventQueueMem[trace.Event](0)),
 		},
 		{
 			testName:      "mem-cache-size=X without cache-type=mem",
@@ -53,7 +54,16 @@ func TestPrepareCache(t *testing.T) {
 		{
 			testName:      "cache-type=mem with mem-cache-size=512",
 			cacheSlice:    []string{"cache-type=mem", "mem-cache-size=512"},
-			expectedCache: queue.NewEventQueueMem(512),
+			expectedCache: queue.NewDefaultCache(queue.NewEventQueueMem[trace.Event](512)),
+		},
+		{
+			testName: "cache-type=mem with mem-cache-size=512 with cache-stage=before-decode",
+			cacheSlice: []string{
+				"cache-type=mem",
+				"mem-cache-size=512",
+				"cache-stage=before-decode",
+			},
+			expectedCache: queue.NewRawEventsCache(queue.NewEventQueueMem[[]byte](512)),
 		},
 	}
 

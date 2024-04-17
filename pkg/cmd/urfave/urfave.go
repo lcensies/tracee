@@ -1,9 +1,8 @@
 package urfave
 
 import (
-	cli "github.com/urfave/cli/v2"
-
 	"github.com/aquasecurity/libbpfgo/helpers"
+	cli "github.com/urfave/cli/v2"
 
 	"github.com/aquasecurity/tracee/pkg/cmd"
 	"github.com/aquasecurity/tracee/pkg/cmd/flags"
@@ -31,7 +30,6 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 	var output flags.PrepareOutputResult
 
 	output, err = flags.TraceeEbpfPrepareOutput(c.StringSlice("output"), false)
-
 	if err != nil {
 		return runner, err
 	}
@@ -49,8 +47,19 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 
 	osInfo, err := helpers.GetOSInfo()
 	if err != nil {
-		logger.Debugw("OSInfo", "warning: os-release file could not be found", "error", err) // only to be enforced when BTF needs to be downloaded, later on
-		logger.Debugw("OSInfo", "os_release_field", helpers.OS_KERNEL_RELEASE, "OS_KERNEL_RELEASE", osInfo.GetOSReleaseFieldValue(helpers.OS_KERNEL_RELEASE))
+		logger.Debugw(
+			"OSInfo",
+			"warning: os-release file could not be found",
+			"error",
+			err,
+		) // only to be enforced when BTF needs to be downloaded, later on
+		logger.Debugw(
+			"OSInfo",
+			"os_release_field",
+			helpers.OS_KERNEL_RELEASE,
+			"OS_KERNEL_RELEASE",
+			osInfo.GetOSReleaseFieldValue(helpers.OS_KERNEL_RELEASE),
+		)
 	} else {
 		osInfoSlice := make([]interface{}, 0)
 		for k, v := range osInfo.GetOSReleaseAllFieldValues() {
@@ -75,6 +84,7 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 
 	cache, err := flags.PrepareCache(c.StringSlice("cache"))
 	if err != nil {
+		logger.Debugw("cache - failed to create cache config")
 		return runner, err
 	}
 	cfg.Cache = cache
@@ -140,7 +150,9 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 		logger.Debugw("OSInfo", "lockdown", err)
 	}
 	if err == nil && lockdown == helpers.CONFIDENTIALITY {
-		return runner, errfmt.Errorf("kernel lockdown is set to 'confidentiality', can't load eBPF programs")
+		return runner, errfmt.Errorf(
+			"kernel lockdown is set to 'confidentiality', can't load eBPF programs",
+		)
 	}
 
 	logger.Debugw("OSInfo", "security_lockdown", lockdown)
@@ -152,7 +164,9 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 		return runner, err
 	}
 	if !enabled {
-		logger.Errorw("ftrace_enabled: ftrace is not enabled, kernel events won't be caught, make sure to enable it by executing echo 1 | sudo tee /proc/sys/kernel/ftrace_enabled")
+		logger.Errorw(
+			"ftrace_enabled: ftrace is not enabled, kernel events won't be caught, make sure to enable it by executing echo 1 | sudo tee /proc/sys/kernel/ftrace_enabled",
+		)
 	}
 
 	// Pick OS information
@@ -177,7 +191,6 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 		c.Bool(server.PProfEndpointFlag),
 		c.Bool(server.PyroscopeAgentFlag),
 	)
-
 	if err != nil {
 		return runner, err
 	}

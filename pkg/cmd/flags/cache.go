@@ -6,6 +6,8 @@ import (
 
 	"github.com/aquasecurity/tracee/pkg/errfmt"
 	"github.com/aquasecurity/tracee/pkg/events/queue"
+	"github.com/aquasecurity/tracee/pkg/logger"
+	"github.com/aquasecurity/tracee/types/trace"
 )
 
 func cacheHelp() string {
@@ -21,22 +23,24 @@ Use this flag multiple times to choose multiple output options
 `
 }
 
-func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
-	var cache queue.CacheConfig
+func PrepareCache(cacheSlice []string) (*queue.CacheConfig, error) {
 	var err error
 	cacheTypeMem := false
 	cacheTypeHybrid := false
+	eventsCacheMemSizeMb := 0
+	eventsCacheDiskSizeMb := 8192
+	cacheStage := "after-decode"
+
+	logger.Debugw("cache - preparing cache config")
 
 	if strings.Contains(cacheSlice[0], "none") {
 		return nil, nil
 	}
 
-	eventsCacheMemSizeMb := 0
-	eventsCacheDiskSizeMb := 8192
 	for _, o := range cacheSlice {
 		cacheParts := strings.SplitN(o, "=", 2)
 		if len(cacheParts) != 2 {
-			return cache, errfmt.Errorf("unrecognized cache option format: %s", o)
+			return nil, errfmt.Errorf("unrecognized cache option format: %s", o)
 		}
 		key := cacheParts[0]
 		value := cacheParts[1]
@@ -74,16 +78,54 @@ func PrepareCache(cacheSlice []string) (queue.CacheConfig, error) {
 			if err != nil {
 				return nil, errfmt.Errorf("could not parse disk-cache-size value: %v", err)
 			}
+		case "cache-stage":
+			switch value {
+			case "before-decode":
+				cacheStage = value
+			case "after-decode":
+				cacheStage = value
+			default:
+				return nil, errfmt.Errorf(
+					"unrecognized cache-stage option: %s (valid options are: before-decode,after-decode)",
+					o,
+				)
+			}
+
 		default:
 			return nil, errfmt.Errorf("unrecognized cache option format: %s", o)
 		}
 	}
-	if cacheTypeMem {
-		return queue.NewEventQueueMem(eventsCacheMemSizeMb), nil
-	} else if cacheTypeHybrid {
-		cache, err := queue.NewEventQueueHybrid(eventsCacheMemSizeMb, eventsCacheDiskSizeMb)
-		return cache, err
 
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: refactor
+	if cacheStage == "before-decode" {
+		logger.Debugw("cache - stage: before-decode")
+		if cacheTypeMem {
+			return queue.NewRawEventsCache(
+				queue.NewEventQueueMem[[]byte](eventsCacheMemSizeMb),
+			), nil
+		} else if cacheTypeHybrid {
+			rawEventQueue, err := queue.NewEventQueueHybrid[[]byte](eventsCacheMemSizeMb, eventsCacheDiskSizeMb)
+			if err != nil {
+				return nil, err
+			}
+			return queue.NewRawEventsCache(rawEventQueue), nil
+		}
+	} else {
+		logger.Debugw("cache - stage: after-decode")
+		if cacheTypeMem {
+			return queue.NewDefaultCache(queue.NewEventQueueMem[trace.Event](eventsCacheMemSizeMb)), nil
+		} else if cacheTypeHybrid {
+
+			rawEventQueue, err := queue.NewEventQueueHybrid[trace.Event](eventsCacheMemSizeMb, eventsCacheDiskSizeMb)
+			if err != nil {
+				return nil, err
+			}
+			return queue.NewDefaultCache(rawEventQueue), nil
+		}
 	}
 
 	return nil, nil

@@ -30,17 +30,34 @@ func (t *Tracee) handleEvents(ctx context.Context, initialized chan<- struct{}) 
 	defer logger.Debugw("Stopped handleEvents goroutine")
 
 	var errcList []<-chan error
+	var eventsChan <-chan *trace.Event
+	var errc <-chan error
+
+	decodeIsFirst := func() bool {
+		if t.config.Cache != nil && t.config.Cache.Stage() == "before-decode" {
+			return false
+		}
+		return true
+	}
 
 	// Decode stage: events are read from the perf buffer and decoded into trace.Event type.
 
-	eventsChan, errc := t.decodeEvents(ctx, t.eventsChannel)
-	errcList = append(errcList, errc)
-
 	// Cache stage: events go through a caching function.
 
-	if t.config.Cache != nil {
+	// logger.Debugw("Decode is first?", "decodeIsFirst")
+	if decodeIsFirst() {
+		logger.Debugw("pipeline - decoding is first")
+		eventsChan, errc = t.decodeEvents(ctx, t.eventsChannel)
+		errcList = append(errcList, errc)
 		eventsChan, errc = t.queueEvents(ctx, eventsChan)
 		errcList = append(errcList, errc)
+	} else {
+		logger.Debugw("pipeline - caching is first")
+		rawEventsChan, errc := t.queueRawEvents(ctx, t.eventsChannel)
+		errcList = append(errcList, errc)
+		eventsChanx, errcx := t.decodeEvents(ctx, rawEventsChan)
+		eventsChan = eventsChanx
+		errcList = append(errcList, errcx)
 	}
 
 	// Sort stage: events go through a sorting function.
@@ -110,13 +127,17 @@ func (t *Tracee) handleEvents(ctx context.Context, initialized chan<- struct{}) 
 // queueEvents is the cache pipeline stage. For each received event, it goes through a
 // caching function that will enqueue the event into a queue. The queue is then de-queued
 // by a different goroutine that will send the event down the pipeline.
-func (t *Tracee) queueEvents(ctx context.Context, in <-chan *trace.Event) (chan *trace.Event, chan error) {
-	out := make(chan *trace.Event, 10000)
+func (t *Tracee) queueEvents(
+	ctx context.Context,
+	in <-chan *trace.Event,
+) (chan *trace.Event, chan error) {
+	out := make(chan *trace.Event, 100000)
 	errc := make(chan error, 1)
 	done := make(chan struct{}, 1)
 
 	// receive and cache events (release pressure in the pipeline)
 	go func() {
+		logger.Debugw("pipeline - starting cache enqueue goroutine")
 		for {
 			select {
 			case <-ctx.Done():
@@ -132,6 +153,57 @@ func (t *Tracee) queueEvents(ctx context.Context, in <-chan *trace.Event) (chan 
 
 	// de-cache and send events (free cache space)
 	go func() {
+		logger.Debugw("pipeline - starting cache dequeue goroutine")
+		defer close(out)
+		defer close(errc)
+
+		for {
+			select {
+			case <-done:
+				logger.Debugw("pipeline - stopping cache dequeue goroutine")
+				return
+			default:
+				event := t.config.Cache.Dequeue() // may block if queue is empty
+				if event != nil {
+					// logger.Debugw("pipeline - successfully dequeued event")
+					out <- event
+				} else {
+					// logger.Debugw("pipeline - dequeued event is nil")
+				}
+			}
+		}
+	}()
+
+	return out, errc
+}
+
+func (t *Tracee) queueRawEvents(
+	ctx context.Context,
+	in <-chan []byte,
+) (chan []byte, chan error) {
+	out := make(chan []byte, 100000)
+	errc := make(chan error, 1)
+	done := make(chan struct{}, 1)
+
+	// receive and cache events (release pressure in the pipeline)
+	go func() {
+		logger.Debugw("pipeline - starting raw cache enqueue goroutine")
+		for {
+			select {
+			case <-ctx.Done():
+				done <- struct{}{}
+				return
+			case event := <-in:
+				if event != nil {
+					t.config.Cache.EnqueueRaw(&event) // may block if queue is full
+				}
+			}
+		}
+	}()
+
+	// de-cache and send events (free cache space)
+	go func() {
+		logger.Debugw("pipeline - starting raw cache dequeue goroutine")
 		defer close(out)
 		defer close(errc)
 
@@ -140,9 +212,9 @@ func (t *Tracee) queueEvents(ctx context.Context, in <-chan *trace.Event) (chan 
 			case <-done:
 				return
 			default:
-				event := t.config.Cache.Dequeue() // may block if queue is empty
+				event := t.config.Cache.DequeueRaw() // may block if queue is empty
 				if event != nil {
-					out <- event
+					out <- *event
 				}
 			}
 		}
@@ -154,13 +226,18 @@ func (t *Tracee) queueEvents(ctx context.Context, in <-chan *trace.Event) (chan 
 // decodeEvents is the event decoding pipeline stage. For each received event, it goes
 // through a decoding function that will decode the event from its raw format into a
 // trace.Event type.
-func (t *Tracee) decodeEvents(ctx context.Context, sourceChan chan []byte) (<-chan *trace.Event, <-chan error) {
-	out := make(chan *trace.Event, 10000)
+func (t *Tracee) decodeEvents(
+	ctx context.Context,
+	sourceChan <-chan []byte,
+) (<-chan *trace.Event, <-chan error) {
+	out := make(chan *trace.Event, 100000)
 	errc := make(chan error, 1)
 	sysCompatTranslation := events.Core.IDs32ToIDs()
 	go func() {
 		defer close(out)
 		defer close(errc)
+
+		logger.Debugw("pipeline - starting decoding function")
 		for dataRaw := range sourceChan {
 			ebpfMsgDecoder := bufferdecoder.New(dataRaw)
 			var eCtx bufferdecoder.EventContext
@@ -209,7 +286,11 @@ func (t *Tracee) decodeEvents(ctx context.Context, sourceChan chan []byte) (<-ch
 			syscall := ""
 			if eCtx.Syscall != noSyscall {
 				var err error
-				syscall, err = parseSyscallID(int(eCtx.Syscall), flags.IsCompat, sysCompatTranslation)
+				syscall, err = parseSyscallID(
+					int(eCtx.Syscall),
+					flags.IsCompat,
+					sysCompatTranslation,
+				)
 				if err != nil {
 					logger.Debugw("Originated syscall parsing", "error", err)
 				}
@@ -396,7 +477,11 @@ func parseContextFlags(containerId string, flags uint32) trace.ContextFlags {
 // parseSyscallID returns the syscall name from its ID, taking into account architecture
 // and 32bit/64bit modes. It also returns an error if the syscall ID is not found in the
 // events definition.
-func parseSyscallID(syscallID int, isCompat bool, compatTranslationMap map[events.ID]events.ID) (string, error) {
+func parseSyscallID(
+	syscallID int,
+	isCompat bool,
+	compatTranslationMap map[events.ID]events.ID,
+) (string, error) {
 	id := events.ID(syscallID)
 	if !isCompat {
 		if !events.Core.IsDefined(id) {
@@ -431,10 +516,12 @@ func (t *Tracee) processEvents(ctx context.Context, in <-chan *trace.Event) (
 	t.invokeInitEvents(out)
 
 	go func() {
+		logger.Debugw("pipeline - starting processing coroutine")
 		defer close(out)
 		defer close(errc)
 
 		for event := range in { // For each received event...
+			logger.Debugw("pipeline - processing event")
 			if event == nil {
 				continue // might happen during initialization (ctrl+c seg faults)
 			}

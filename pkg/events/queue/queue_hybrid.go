@@ -14,7 +14,7 @@ import (
 )
 
 // this usecase implements EventQueue interface with a memory stored queue (FIFO)
-type eventQueueHybrid struct {
+type eventQueueHybrid[T trace.Event | []byte] struct {
 	mutex                      *sync.Mutex
 	cond                       *sync.Cond
 	cache                      *dque.DQue
@@ -36,17 +36,17 @@ var (
 	storeAt   string = filepath.Join(traceeDir, "hybrid_cache")
 )
 
-func NewEventQueueHybrid(
+func NewEventQueueHybrid[T trace.Event | []byte](
 	memorySizeMb int,
 	diskSizeMb int,
-) (CacheConfig, error) {
+) (EventQueue[T], error) {
 	if diskSizeMb < memorySizeMb {
 		return nil, errors.New(
 			"Queue size on disk should be greater or equal to the in-memory size",
 		)
 	}
 
-	q := &eventQueueHybrid{
+	q := &eventQueueHybrid[T]{
 		eventsCacheMemSizeMB:  memorySizeMb,
 		eventsCacheDiskSizeMB: diskSizeMb,
 	}
@@ -61,7 +61,7 @@ func NewEventQueueHybrid(
 	return q, err
 }
 
-func (q *eventQueueHybrid) String() string {
+func (q *eventQueueHybrid[T]) String() string {
 	return q.verbose
 }
 
@@ -71,17 +71,21 @@ func EventBuilder() interface{} {
 	return &trace.Event{}
 }
 
+// func (q *eventQueueHybrid[T trace.Event]) BuildEvent() interface{} {
+// 	return &trace.Event{}
+// }
+
 // Dqueue keeps only it's head and tail in the memory. Hence,
 // the allowed memory usage by the queue is equals to the
 // size of two segments. In one segment we can have
 // kbToB(mbToKB(queueMemSizeMb)) / 2 bytes.
-func (q *eventQueueHybrid) getItemsPerSegment() int {
+func (q *eventQueueHybrid[T]) getItemsPerSegment() int {
 	queueMemSizeMb := q.getQueueMemorySizeInMb()
 
 	return kbToB(mbToKB(queueMemSizeMb)) / 2 / eventSize
 }
 
-func (q *eventQueueHybrid) setup() error {
+func (q *eventQueueHybrid[T]) setup() error {
 	q.mutex = new(sync.Mutex)
 	q.cond = sync.NewCond(q.mutex)
 
@@ -102,6 +106,27 @@ func (q *eventQueueHybrid) setup() error {
 	err := os.MkdirAll(traceeDir, 0755)
 	_ = os.RemoveAll(storeAt)
 
+	var builderFunc func() interface{}
+	var sampleEvent T
+	switch any(sampleEvent).(type) {
+	case trace.Event:
+		builderFunc = func() interface{} {
+			return &trace.Event{}
+		}
+	default:
+		builderFunc = func() interface{} {
+			return make([]byte, 1024)
+		}
+	}
+	// 	}
+
+	// if reflect.TypeOf(T) == sampleEvent.(type) {
+	// } else {
+	// 	builderFunc = func() interface{} {
+	// 		return make([]byte, 1024)
+	// 	}
+	// }
+
 	// TODO: parametrize max dize of the
 	// queue on disk
 	dq, err := dque.NewOrOpen(
@@ -109,7 +134,7 @@ func (q *eventQueueHybrid) setup() error {
 		queuePath,
 		q.eventsCacheItemsPerSegment,
 		func() interface{} {
-			return EventBuilder()
+			return builderFunc
 		},
 	)
 	if err != nil {
@@ -127,7 +152,7 @@ func (q *eventQueueHybrid) setup() error {
 }
 
 // Enqueue pushes an event into the queue (may block until queue is available)
-func (q *eventQueueHybrid) Enqueue(evt *trace.Event) {
+func (q *eventQueueHybrid[T]) Enqueue(evt *T) {
 	q.cond.L.Lock()
 	// enqueue waits for de-queuing if cache is full (using >= instead of == to be in the safe side...)
 	for q.cache.Size() >= q.maxAmountOfEvents {
@@ -142,7 +167,7 @@ func (q *eventQueueHybrid) Enqueue(evt *trace.Event) {
 }
 
 // Dequeue pops an event from the queue
-func (q *eventQueueHybrid) Dequeue() *trace.Event {
+func (q *eventQueueHybrid[T]) Dequeue() *T {
 	q.cond.L.Lock()
 
 	// dequeue waits for en-queueing if cache is empty
@@ -156,7 +181,7 @@ func (q *eventQueueHybrid) Dequeue() *trace.Event {
 		return nil
 	}
 
-	event, ok := e.(*trace.Event)
+	event, ok := e.(*T)
 	q.cond.L.Unlock()
 	if !ok {
 		return nil
@@ -167,11 +192,11 @@ func (q *eventQueueHybrid) Dequeue() *trace.Event {
 	return event
 }
 
-func (q *eventQueueHybrid) Size() int {
+func (q *eventQueueHybrid[T]) Size() int {
 	return q.cache.Size()
 }
 
-func (q *eventQueueHybrid) Capacity() int {
+func (q *eventQueueHybrid[T]) Capacity() int {
 	return q.maxAmountOfEvents
 }
 
@@ -189,7 +214,7 @@ func gbToMB(amountInGB int) int {
 
 // getQueueMemorySizeInMb returns size of the fifo queue, in  megabytes, based on
 // the host size
-func (q *eventQueueHybrid) getQueueMemorySizeInMb() int {
+func (q *eventQueueHybrid[T]) getQueueMemorySizeInMb() int {
 	switch {
 	case q.eventsCacheMemSizeMB <= gbToMB(1): // up to 1GB, cache = ~256MB in events #
 		return 256
@@ -207,7 +232,7 @@ func (q *eventQueueHybrid) getQueueMemorySizeInMb() int {
 
 // getQueueSizeInEvents returns size of the fifo queue, in # of events, based on
 // the host size
-func (q *eventQueueHybrid) getQueueSizeInEvents() int {
+func (q *eventQueueHybrid[T]) getQueueSizeInEvents() int {
 	amountOfEvents := func(amountInMB int) int {
 		return kbToB(mbToKB(amountInMB)) / eventSize
 	}
@@ -217,7 +242,7 @@ func (q *eventQueueHybrid) getQueueSizeInEvents() int {
 	return amountOfEvents(q.eventsCacheDiskSizeMB)
 }
 
-func (q *eventQueueHybrid) Teardown() error {
+func (q *eventQueueHybrid[T]) Teardown() error {
 	if _, err := os.Stat(storeAt); err == nil {
 		return os.RemoveAll(storeAt)
 	} else {
