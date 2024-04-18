@@ -28,13 +28,15 @@ const (
 )
 
 type measurement struct {
-	AvgEbpfRate       float64 `json:"avgEbpfRate"`
-	AvgLostEventsRate float64 `json:"avgLostEventsRate"`
-	TotalEvents       int     `json:"totalEvents"`
-	LostEvents        int     `json:"lostEvents"`
-	LostTotalRatio    float64 `json:"lostTotalRatio"`
-	CacheLoad         float64 `json:"cacheLoad"`
-	CachedEvents      int     `json:"cachedEvents"`
+	AvgEbpfRate         float64 `json:"avgEbpfRate"`
+	AvgLostEventsRate   float64 `json:"avgLostEventsRate"`
+	TotalEvents         int     `json:"totalEvents"`
+	LostEvents          int     `json:"lostEvents"`
+	LostTotalRatio      float64 `json:"lostTotalRatio"`
+	CacheLoad           float64 `json:"cacheLoad"`
+	CachedEvents        int     `json:"cachedEvents"`
+	MemoryConsumptionMb int     `json:"memConsumptionMb"`
+	CpuPercent          float64 `json:"cpuPercent"`
 }
 
 func (m measurement) Print() {
@@ -45,7 +47,9 @@ func (m measurement) Print() {
 	fmt.Printf("Events Lost:    %d\n", m.LostEvents)
 	fmt.Printf("Events cached:  %v\n", m.CachedEvents)
 	fmt.Printf("Cache load percentage:  %v\n", m.CacheLoad)
-	fmt.Printf("Lost/Total radio:  %v\n", m.LostTotalRatio)
+	fmt.Printf("Lost/Total ratio:  %v\n", m.LostTotalRatio)
+	fmt.Printf("Memory consumption (MB):  %v\n", m.MemoryConsumptionMb)
+	fmt.Printf("CPU percent:  %v\n", m.CpuPercent)
 	fmt.Println("===============================================")
 }
 
@@ -63,6 +67,7 @@ const (
 
 func main() {
 	app := cli.App{
+		// TODO: fetch metrics during last periodFlag seconds
 		Name:  "tracee-bench",
 		Usage: "A prometheus based performance probe for tracee",
 		Flags: []cli.Flag{
@@ -157,6 +162,8 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		losttototal  = "lost_to_total"
 		cached       = "events_cached"
 		cacheload    = "cache_load"
+		cpuseconds   = "tracee_cpu_seconds"
+		memload      = "mem_load_mb"
 	)
 	queries := map[string]struct {
 		queryName string
@@ -173,15 +180,15 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		// TODO: parametrize whether to capture only last minute for liot
 		lostoverall: {
 			queryName: "lost events",
-			query:     "sum_over_time(tracee_ebpf_lostevents_total[1h])",
+			query:     "tracee_ebpf_lostevents_total",
 		},
 		total: {
-			queryName: "captured events",
-			query:     "sum_over_time(tracee_ebpf_events_total[1h]) + sum_over_time(tracee_ebpf_lostevents_total[1h])",
+			queryName: "total events",
+			query:     "(tracee_ebpf_events_total + tracee_ebpf_lostevents_total)",
 		},
 		losttototal: {
 			queryName: "lost to total events ratio",
-			query:     "sum_over_time(tracee_ebpf_lostevents_total[1h]) / (sum_over_time(tracee_ebpf_lostevents_total[1h]) + sum_over_time(tracee_ebpf_events_total[1h]))",
+			query:     "tracee_ebpf_lostevents_total/(tracee_ebpf_events_total / tracee_ebpf_lostevents_total)",
 		},
 		cached: {
 			queryName: "cached_events",
@@ -190,6 +197,14 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		cacheload: {
 			queryName: "cache_load",
 			query:     "max_over_time(tracee_ebpf_cache_load[5s])",
+		},
+		cpuseconds: {
+			queryName: "tracee_cpu_percent",
+			query:     "irate(process_cpu_seconds_total{job=\"tracee\"}[5m]) * 100",
+		},
+		memload: {
+			queryName: "memory_consumption",
+			query:     "process_resident_memory_bytes{job=\"tracee\"}",
 		},
 	}
 
@@ -226,6 +241,10 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 				measurement.CachedEvents = int(val)
 			case cacheload:
 				measurement.CacheLoad = float64(val)
+			case memload:
+				measurement.MemoryConsumptionMb = int(val) / 1024 / 1024
+			case cpuseconds:
+				measurement.CpuPercent = float64(val)
 			}
 		}(field, query.queryName, query.query)
 	}
