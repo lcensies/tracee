@@ -24,8 +24,11 @@ end
 vm_name = "tracee-#{arch}-vm"
 
 Vagrant.configure("2") do |config|
+  # Prometheus
   config.vm.network "forwarded_port", guest: 9090, host: 9090
+   # Tracee metrics server
   config.vm.network "forwarded_port", guest: 3366, host: 3366
+  # Grafana
   config.vm.network "forwarded_port", guest: 3000, host: 3000
   case arch
   when "amd64"
@@ -42,7 +45,7 @@ Vagrant.configure("2") do |config|
     config.vm.provider "virtualbox" do |vb|
       vb.name = vm_name
       vb.cpus = "4"
-      vb.memory = "2048"
+      vb.memory = "8192"
       vb.gui = false
     end
   when "Darwin"

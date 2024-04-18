@@ -2,6 +2,7 @@
 version: '3.8'
 volumes:
   prometheus_data: {}
+  grafana-data: {}
 services:
   node-exporter:
     image: prom/node-exporter:latest
@@ -53,12 +54,13 @@ services:
       - 9090
     network_mode: host
   grafana:
-    image: grafana/grafana:main
+    image: grafana/grafana:latest
     container_name: tracee-grafana
     pull_policy: if_not_present
     restart: unless-stopped
     volumes:
       - ./provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -66,7 +68,7 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_AUTH_OAUTH_AUTO_LOGIN=true
-      - GF_EXPLORE_ENABLED=false
+      - GF_EXPLORE_ENABLED=true
       - GF_ALERTING_ENABLED=false
       - GF_UNIFIED_ALERTING_ENABLED=false
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/tracee.json
