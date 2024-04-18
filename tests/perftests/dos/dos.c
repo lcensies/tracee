@@ -81,14 +81,15 @@ int main(int argc, char *argv[])
 {
     char *real_command;
     int iters;
+    float dos_timeout;
     float sleep_timeout;
-
-    setup_timeout(60);
 
     iters = atoi(getenv("DOS_N_FAKE_COMMANDS"));
     real_command = getenv("DOS_MALICIOUS_COMMAND");
     sleep_timeout = atof(getenv("DOS_SLEEP_DURATION_SEC"));
+    dos_timeout = atof(getenv("DOS_N_FAKE_COMMANDS"));
 
+    setup_timeout(dos_timeout);
     printf("Running dos with %d iterations, %f sleep timeout, %s hidden command\n",
            iters,
            sleep_timeout,
