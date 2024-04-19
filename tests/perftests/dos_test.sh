@@ -12,10 +12,12 @@ DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-"0.8"}
 # DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
 TRACEE_CPU_LIMIT=${TRACEE_CPU_LIMIT:-"1"}
-TRACE_NO_CONTAINER=false
+TRACEE_NO_CONTAINER=false
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
+TRACEE_CACHE_STAGE="before-decode"
 TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-1024}
+# TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
 TRACEE_PERF_BUFFER_SIZE=${TRACEE_PERF_BUFFER_SIZE:-1024}
 TRACEE_LISTEN_ADDR=http:/localhost:3366
@@ -26,7 +28,7 @@ TRACEE_EXE=/tracee/tracee-ebpf
 TRACEE_EVENTS=security_file_open
 # --output out-file:/tmp/tracee/tracee.log -
 # TRACEE_EVENTS=security_file_open,creat,chmod,fchmod,chown,fchown,lchown,ptrace,setuid,setgid,setpgid,setsid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,init_module,fchownat,fchmodat,setns,process_vm_readv,process_vm_writev,finit_module,memfd_create,move_mount,sched_process_exec,security_inode_unlink,security_socket_connect,security_socket_accept,security_socket_bind,security_sb_mount,net_packet_icmp,net_packet_icmpv6,net_packet_dns_request,net_packet_dns_response,net_packet_http_request,net_packet_http_response
-TRACEE_CACHE_FLAGS="--cache cache-stage=before-decode -cache cache-type=mem --cache mem-cache-size=${TRACEE_MEM_CACHE_SIZE}"
+TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$TRACEE_CACHE_TYPE --cache mem-cache-size=$TRACEE_MEM_CACHE_SIZE"
 # TRACE_LOG_FLAGS="--log debug --log file:${TRACEE_LOG_FILE"
 TRACE_LOG_FLAGS=""
 
@@ -36,21 +38,6 @@ TRACEE_OUTPUT_FLAGS="--output json --output out-file:${TRACEE_OUTPUT_FILE}"
 TRACEE_FLAGS="$TRACEE_LOG_FLAGS $TRACEE_OUTPUT_FLAGS $TRACEE_CACHE_FLAGS --metrics --healthz=true  -e ${TRACEE_EVENTS}"
 
 call_teardown=0
-
-tracee_cache_params=()
-if [[ "$TRACEE_CACHE_TYPE" == "mem" ]]; then
-	tracee_cache_params+=("--cache")
-	tracee_cache_params+=("cache-type=mem")
-	tracee_cache_params+=("--cache")
-	tracee_cache_params+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
-else
-	tracee_cache_params+=("--cache")
-	tracee_cache_params+=("cache-type=hybrid")
-	tracee_cache_params+=("--cache")
-	tracee_cache_params+=("mem-cache-size=$TRACEE_MEM_CACHE_SIZE")
-	tracee_cache_params+=("--cache")
-	tracee_cache_params+=("disk-cache-size=$TRACEE_DISK_CACHE_SIZE")
-fi
 
 start_prometheus() {
 	perf_compose="$TRACEE_ROOT/performance/dashboard/docker-compose.yml"
@@ -94,7 +81,7 @@ teardown() {
 start_tracee() {
 	echo Starting tracee
 
-	if [ "${TRACEE_NO_CONTAINER}" ]; then
+	if [ "${TRACEE_NO_CONTAINER}" = true ]; then
 		TRACEE_CMD="sudo ./dist/tracee"
 	else
 		TRACEE_CMD="docker run --cpus ${TRACEE_CPU_LIMIT} --name tracee -e TRACEE_EXE=/tracee/tracee-ebpf ${DOCKER_INTERACTIVE_FLAG} --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -p 3366:3366 tracee:latest"
