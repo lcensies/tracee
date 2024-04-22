@@ -131,7 +131,7 @@ func (t *Tracee) queueEvents(
 	ctx context.Context,
 	in <-chan *trace.Event,
 ) (chan *trace.Event, chan error) {
-	out := make(chan *trace.Event, 100000)
+	out := make(chan *trace.Event, 10000)
 	errc := make(chan error, 1)
 	done := make(chan struct{}, 1)
 
@@ -181,7 +181,7 @@ func (t *Tracee) queueRawEvents(
 	ctx context.Context,
 	in <-chan []byte,
 ) (chan []byte, chan error) {
-	out := make(chan []byte, 100000)
+	out := make(chan []byte, 10000)
 	errc := make(chan error, 1)
 	done := make(chan struct{}, 1)
 
@@ -230,7 +230,7 @@ func (t *Tracee) decodeEvents(
 	ctx context.Context,
 	sourceChan <-chan []byte,
 ) (<-chan *trace.Event, <-chan error) {
-	out := make(chan *trace.Event, 100000)
+	out := make(chan *trace.Event, 10000)
 	errc := make(chan error, 1)
 	sysCompatTranslation := events.Core.IDs32ToIDs()
 	go func() {

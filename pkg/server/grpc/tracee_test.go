@@ -74,7 +74,11 @@ func Test_convertEventWithStackaddresses(t *testing.T) {
 	}
 
 	for i := range expected {
-		assert.Equal(t, expected[i].Address, protoEvent.Context.Process.Thread.UserStackTrace.Addresses[i].Address)
+		assert.Equal(
+			t,
+			expected[i].Address,
+			protoEvent.Context.Process.Thread.UserStackTrace.Addresses[i].Address,
+		)
 	}
 }
 
