@@ -1,10 +1,11 @@
 #!/bin/bash -ex
 PROMETHEUS_ADDR=http://localhost:9090
 
+SCRIPT_DIR=$(dirname -- "$0")
 DOCKER_INTERACTIVE_FLAG=-d
 
-DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.05}
-DOS_DURATION_SEC=${DOS_DURATION_SEC:-120}
+DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.018}
+DOS_DURATION_SEC=${DOS_DURATION_SEC:-60}
 DOS_CMD=/app/dos
 DOS_N_FAKE_COMMANDS="2000"
 DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
@@ -15,7 +16,7 @@ TRACEE_CPU_LIMIT=${TRACEE_CPU_LIMIT:-"1"}
 TRACEE_NO_CONTAINER=false
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
-TRACEE_CACHE_STAGE="before-decode"
+TRACEE_CACHE_STAGE="after-decode"
 TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-1024}
 # TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
@@ -23,20 +24,28 @@ TRACEE_PERF_BUFFER_SIZE=${TRACEE_PERF_BUFFER_SIZE:-1024}
 TRACEE_LISTEN_ADDR=http:/localhost:3366
 TRACEE_EVENTS_SINK_TIMEOUT=${TRACEE_EVENTS_SINK_TIMEOUT:-5}
 TRACEE_BENCHMARK_OUTPUT_FILE=${TRACEE_BENCHMARK_OUTPUT_FILE:-""}
+
 TRACEE_LOG_FILE=${TRACEE_LOG_FILE:-/tmp/tracee/tracee.log}
-TRACEE_EXE=/tracee/tracee-ebpf
+TRACEE_EXE=/tracee/tracee
 TRACEE_EVENTS=security_file_open
+# --output [webhook|forward]:[protocol://user:pass@]host:port[?k=v#f]
 # --output out-file:/tmp/tracee/tracee.log -
 # TRACEE_EVENTS=security_file_open,creat,chmod,fchmod,chown,fchown,lchown,ptrace,setuid,setgid,setpgid,setsid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,init_module,fchownat,fchmodat,setns,process_vm_readv,process_vm_writev,finit_module,memfd_create,move_mount,sched_process_exec,security_inode_unlink,security_socket_connect,security_socket_accept,security_socket_bind,security_sb_mount,net_packet_icmp,net_packet_icmpv6,net_packet_dns_request,net_packet_dns_response,net_packet_http_request,net_packet_http_response
 TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$TRACEE_CACHE_TYPE --cache mem-cache-size=$TRACEE_MEM_CACHE_SIZE"
 # TRACE_LOG_FLAGS="--log debug --log file:${TRACEE_LOG_FILE"
 TRACE_LOG_FLAGS=""
 
-TRACEE_OUTPUT_FILE="/tmp/tracee/output.json"
+# TRACEE_OUTPUT_FILE="/tmp/tracee/output.json"
 # TRACEE_OUTPUT_FLAGS="--output json --output out-file:${TRACEE_OUTPUT_FILE}"
-TRACEE_OUTPUT_FLAGS="--output none"
+# TRACEE_OUTPUT_FLAGS="--output none"
+TRACEE_OUTPUT_FLAGS="--output webhook:http://192.168.81.1:3434"
+
+# host: port: 3434
+
+# --output [webhook|forward]:[protocol://user:pass@]host:port[?k=v#f]
 
 TRACEE_FLAGS="$TRACEE_LOG_FLAGS $TRACEE_OUTPUT_FLAGS $TRACEE_CACHE_FLAGS --metrics --healthz=true  -e ${TRACEE_EVENTS}"
+# TRACEE_FLAGS="--config /etc/tracee/config.yaml"
 
 call_teardown=0
 
@@ -85,7 +94,7 @@ start_tracee() {
 	if [ "${TRACEE_NO_CONTAINER}" = true ]; then
 		TRACEE_CMD="sudo ./dist/tracee"
 	else
-		TRACEE_CMD="docker run --cpus ${TRACEE_CPU_LIMIT} --name tracee -e TRACEE_EXE=/tracee/tracee-ebpf ${DOCKER_INTERACTIVE_FLAG} --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -p 3366:3366 tracee:latest"
+		TRACEE_CMD="docker run --cpus ${TRACEE_CPU_LIMIT} --name tracee -e TRACEE_EXE=${TRACEE_EXE} ${DOCKER_INTERACTIVE_FLAG} --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -v ${SCRIPT_DIR}/tracee:/etc/tracee -p 3366:3366 tracee:latest"
 	fi
 
 	echo TRACEE_CMD is "$TRACEE_CMD"
@@ -105,7 +114,9 @@ start_tracee() {
 }
 
 run_dos() {
-	# TODO: add building of dos container
+
+	cd /vagrant && make -f builder/Makefile.dos-container
+
 	echo Starting dos container for $DOS_DURATION_SEC seconds
 	# dos "$DOS_N_FAKE_COMMANDS" "$DOS_MALICIOUS_COMMAND" "$DOS_SLEEP_DURATION_SEC"
 	docker run -d --rm --name dos \
@@ -133,9 +144,8 @@ run_benchmark() {
 
 _main() {
 
-	# [[ $call_teardown -eq 1 ]] && teardown
-
 	teardown
+
 	start_prometheus
 	tracee_is_running || start_tracee
 

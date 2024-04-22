@@ -32,10 +32,6 @@ vagrant halt && vagrant up
 
 $BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
-# $VM_SSH_CMD docker image ls | grep dos
-# Build DoS container
-$VM_SSH_CMD make -f builder/Makefile.dos-container
-
 # Build tracee if necesarry
 # $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
