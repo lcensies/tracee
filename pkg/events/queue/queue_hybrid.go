@@ -50,10 +50,12 @@ func NewEventQueueHybrid[T trace.Event | []byte](
 		eventsCacheMemSizeMB:  memorySizeMb,
 		eventsCacheDiskSizeMB: diskSizeMb,
 	}
+
 	err := q.setup()
 	if err != nil {
 		return nil, err
 	}
+
 	q.verbose = fmt.Sprintf(
 		"Hybrid Event Queue (Size = %d MB in-memory, %d MB on-disk)",
 		q.eventsCacheMemSizeMB, q.eventsCacheDiskSizeMB,
@@ -93,7 +95,7 @@ func (q *eventQueueHybrid[T]) setup() error {
 	q.maxAmountOfEvents = q.getQueueSizeInEvents()
 
 	// TODO: parametrize path
-	queuePath := path.Dir(storeAt)
+	queueDir := path.Dir(storeAt)
 	queueName := path.Base(storeAt)
 
 	// Cleanup queue at the start. In some cases persistence
@@ -103,8 +105,12 @@ func (q *eventQueueHybrid[T]) setup() error {
 
 	// TODO: parametrize whether queue should be cleaned
 
-	err := os.MkdirAll(traceeDir, 0755)
-	_ = os.RemoveAll(storeAt)
+	if err := os.RemoveAll(queueDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(queueDir, 0755); err != nil {
+		return err
+	}
 
 	var builderFunc func() interface{}
 	var sampleEvent T
@@ -118,20 +124,12 @@ func (q *eventQueueHybrid[T]) setup() error {
 			return make([]byte, 1024)
 		}
 	}
-	// 	}
-
-	// if reflect.TypeOf(T) == sampleEvent.(type) {
-	// } else {
-	// 	builderFunc = func() interface{} {
-	// 		return make([]byte, 1024)
-	// 	}
-	// }
 
 	// TODO: parametrize max dize of the
 	// queue on disk
-	dq, err := dque.NewOrOpen(
+	dq, err := dque.New(
 		queueName,
-		queuePath,
+		queueDir,
 		q.eventsCacheItemsPerSegment,
 		func() interface{} {
 			return builderFunc
