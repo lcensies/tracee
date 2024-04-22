@@ -188,7 +188,7 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		},
 		losttototal: {
 			queryName: "lost to total events ratio",
-			query:     "tracee_ebpf_lostevents_total/(tracee_ebpf_events_total / tracee_ebpf_lostevents_total)",
+			query:     "tracee_ebpf_lostevents_total/(tracee_ebpf_events_total + tracee_ebpf_lostevents_total)",
 		},
 		cached: {
 			queryName: "cached_events",
