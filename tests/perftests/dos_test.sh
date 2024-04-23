@@ -1,14 +1,20 @@
-#!/bin/bash -ex
+#!/bin/bash -e
+
 PROMETHEUS_ADDR=http://localhost:9090
+WEBHOOK_ADDR=http://192.168.81.1:3434
 
-SCRIPT_DIR=$(dirname -- "$0")
+SCRIPT_DIR="$(cd ${0%/*} && pwd -P)"
+
 DOCKER_INTERACTIVE_FLAG=-d
+DOCKER_TRACEE_IMAGE=tracee:latest
+# DOCKER_IMAGE=aquasec/tracee:latest
 
+DOS_ENABLED=true
 DOS_SLEEP_DURATION_SEC=${DOS_SLEEP_DURATION_SEC:-0.018}
 DOS_DURATION_SEC=${DOS_DURATION_SEC:-60}
 DOS_CMD=/app/dos
 DOS_N_FAKE_COMMANDS="2000"
-DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123'
+DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123 >> /tmp/other_file && cat /tmp/other_file'
 # DOS_MALICIOUS_COMMAND='touch /tmp/counter && date && a="$(cat /tmp/counter)"; echo "$a +1" | bc > /tmp/counter'
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-"0.8"}
 # DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
@@ -17,20 +23,19 @@ TRACEE_NO_CONTAINER=false
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
 TRACEE_CACHE_STAGE="after-decode"
-TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-1024}
+TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 # TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
 TRACEE_PERF_BUFFER_SIZE=${TRACEE_PERF_BUFFER_SIZE:-1024}
 TRACEE_LISTEN_ADDR=http:/localhost:3366
 TRACEE_EVENTS_SINK_TIMEOUT=${TRACEE_EVENTS_SINK_TIMEOUT:-5}
 TRACEE_BENCHMARK_OUTPUT_FILE=${TRACEE_BENCHMARK_OUTPUT_FILE:-""}
-
 TRACEE_LOG_FILE=${TRACEE_LOG_FILE:-/tmp/tracee/tracee.log}
 TRACEE_EXE=/tracee/tracee
-TRACEE_EVENTS=security_file_open
+# TRACEE_EVENTS=security_file_open
 # --output [webhook|forward]:[protocol://user:pass@]host:port[?k=v#f]
 # --output out-file:/tmp/tracee/tracee.log -
-# TRACEE_EVENTS=security_file_open,creat,chmod,fchmod,chown,fchown,lchown,ptrace,setuid,setgid,setpgid,setsid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,init_module,fchownat,fchmodat,setns,process_vm_readv,process_vm_writev,finit_module,memfd_create,move_mount,sched_process_exec,security_inode_unlink,security_socket_connect,security_socket_accept,security_socket_bind,security_sb_mount,net_packet_icmp,net_packet_icmpv6,net_packet_dns_request,net_packet_dns_response,net_packet_http_request,net_packet_http_response
+TRACEE_EVENTS=vfs_read,vfs_readv,vfs_write,creat,chmod,fchmod,chown,fchown,lchown,ptrace,setuid,setgid,setpgid,setsid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,init_module,fchownat,fchmodat,setns,process_vm_readv,process_vm_writev,finit_module,memfd_create,move_mount,sched_process_exec,security_inode_unlink,security_socket_connect,security_socket_accept,security_socket_bind,security_sb_mount,net_packet_icmp,net_packet_icmpv6,net_packet_dns_request,net_packet_dns_response,net_packet_http_request,net_packet_http_response
 TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$TRACEE_CACHE_TYPE --cache mem-cache-size=$TRACEE_MEM_CACHE_SIZE"
 # TRACE_LOG_FLAGS="--log debug --log file:${TRACEE_LOG_FILE"
 TRACE_LOG_FLAGS=""
@@ -38,7 +43,7 @@ TRACE_LOG_FLAGS=""
 # TRACEE_OUTPUT_FILE="/tmp/tracee/output.json"
 # TRACEE_OUTPUT_FLAGS="--output json --output out-file:${TRACEE_OUTPUT_FILE}"
 # TRACEE_OUTPUT_FLAGS="--output none"
-TRACEE_OUTPUT_FLAGS="--output webhook:http://192.168.81.1:3434"
+TRACEE_OUTPUT_FLAGS="--output webhook:$WEBHOOK_ADDR"
 
 # host: port: 3434
 
@@ -46,8 +51,6 @@ TRACEE_OUTPUT_FLAGS="--output webhook:http://192.168.81.1:3434"
 
 TRACEE_FLAGS="$TRACEE_LOG_FLAGS $TRACEE_OUTPUT_FLAGS $TRACEE_CACHE_FLAGS --metrics --healthz=true  -e ${TRACEE_EVENTS}"
 # TRACEE_FLAGS="--config /etc/tracee/config.yaml"
-
-call_teardown=0
 
 start_prometheus() {
 	perf_compose="$TRACEE_ROOT/performance/dashboard/docker-compose.yml"
@@ -68,6 +71,10 @@ clear_prometheus() {
 
 }
 
+clear_server() {
+	curl -X POST "$WEBHOOK_ADDR/reset"
+}
+
 tracee_is_running() {
 	if [ -n "$(docker ps -q --filter "ancestor=tracee")" ]; then
 		return 0 # True, container is found
@@ -79,22 +86,29 @@ tracee_is_running() {
 # Teardown outdated instances of dos and tracee containers
 teardown() {
 	echo Tearing down existing tracee and dos containers
-	docker stop tracee dos 2>/dev/null || true
+	docker stop tracee dos 2>/dev/null || :
 
 	while [ $(tracee_is_running) ]; do
 		sleep 0.1
 	done
 
 	clear_prometheus
+	clear_server
 }
 
-start_tracee() {
+build_tracee_docker() {
+	(docker image ls | grep $DOCKER_TRACEE_IMAGE) ||
+		(cd /vagrant && make -f builder/Makefile.tracee-container build-tracee)
+}
+
+run_tracee() {
 	echo Starting tracee
 
 	if [ "${TRACEE_NO_CONTAINER}" = true ]; then
 		TRACEE_CMD="sudo ./dist/tracee"
 	else
-		TRACEE_CMD="docker run --cpus ${TRACEE_CPU_LIMIT} --name tracee -e TRACEE_EXE=${TRACEE_EXE} ${DOCKER_INTERACTIVE_FLAG} --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -v ${SCRIPT_DIR}/tracee:/etc/tracee -p 3366:3366 tracee:latest"
+		# build_tracee_docker
+		TRACEE_CMD="docker run --cpus ${TRACEE_CPU_LIMIT} --name tracee -e TRACEE_EXE=${TRACEE_EXE} ${DOCKER_INTERACTIVE_FLAG} --rm --pid=host --cgroupns=host --privileged -v /etc/os-release:/etc/os-release-host:ro -v /boot:/boot -v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -v ${SCRIPT_DIR}/tracee:/etc/tracee -p 3366:3366 $DOCKER_TRACEE_IMAGE"
 	fi
 
 	echo TRACEE_CMD is "$TRACEE_CMD"
@@ -138,8 +152,21 @@ wait_tracee_sink() {
 }
 
 run_benchmark() {
+	echo -e "\n"
 	TRACEE_BENCH_CMD="go run $TRACEE_ROOT/cmd/tracee-bench/main.go --single=true --output json"
-	$TRACEE_BENCH_CMD
+
+	if [ "$TRACEE_BENCHMARK_OUTPUT_FILE" != "" ]; then
+		benchmark_dir=${TRACEE_BENCHMARK_OUTPUT_FILE%/*}
+		sudo rm -r "$benchmark_dir" 2>/dev/null || :
+		mkdir -p "$benchmark_dir"
+		$TRACEE_BENCH_CMD >"$TRACEE_BENCHMARK_OUTPUT_FILE" 2>/dev/null
+	else
+		$TRACEE_BENCH_CMD 2>/dev/null
+	fi
+}
+
+fetch_stats() {
+	curl "$WEBHOOK_ADDR"
 }
 
 _main() {
@@ -147,22 +174,14 @@ _main() {
 	teardown
 
 	start_prometheus
-	tracee_is_running || start_tracee
+	run_tracee
 
-	run_dos
+	($DOS_ENABLED && run_dos) || sleep "$DOS_DURATION_SEC"
 
-	wait_tracee_sink
+	# docker stop tracee 2>/dev/null || :
+	fetch_stats
+	run_benchmark
 
-	if [ "$TRACEE_BENCHMARK_OUTPUT_FILE" != "" ]; then
-		benchmark_dir=${TRACEE_BENCHMARK_OUTPUT_FILE%/*}
-		sudo rm -r "$benchmark_dir" 2>/dev/null || :
-		mkdir -p "$benchmark_dir"
-		run_benchmark >"$TRACEE_BENCHMARK_OUTPUT_FILE"
-	else
-		run_benchmark
-	fi
-
-	# [[ $call_teardown -eq 1 ]] && teardown
 }
 
 _main
