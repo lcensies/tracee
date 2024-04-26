@@ -1,6 +1,8 @@
 package urfave
 
 import (
+	"math"
+
 	"github.com/aquasecurity/libbpfgo/helpers"
 	cli "github.com/urfave/cli/v2"
 
@@ -115,6 +117,28 @@ func GetTraceeRunner(c *cli.Context, version string) (cmd.Runner, error) {
 		return runner, err
 	}
 	cfg.Capabilities = &capsCfg
+
+	// TODO: better initialization
+	// TODO: controlplane routine to increase submission
+	// interval of events according to config
+	cfg.EventsMergeConfig = config.MergeConfig{
+		[4]config.MergeMode{
+			{
+				0, 30, 10000,
+			},
+			{
+				1, 60, 50000,
+			},
+			{
+				2, 300, math.MaxUint64,
+			},
+			// Last barrier is reserved
+			{
+				3, 60, math.MaxUint64,
+			},
+		},
+		3,
+	}
 
 	// Filter command line flags
 

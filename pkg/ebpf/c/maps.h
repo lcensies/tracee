@@ -54,8 +54,7 @@ typedef __u64 stack_trace_t[MAX_STACK_DEPTH];
 #define BPF_STACK_TRACE(_name, _max_entries)                                                       \
     BPF_MAP(_name, BPF_MAP_TYPE_STACK_TRACE, u32, stack_trace_t, _max_entries)
 
-enum tail_call_id_e
-{
+enum tail_call_id_e {
     TAIL_VFS_WRITE,
     TAIL_VFS_WRITEV,
     TAIL_SEND_BIN,
@@ -116,6 +115,8 @@ BPF_PERCPU_ARRAY(event_data_map, event_data_t, 1);                 // persist ev
 BPF_PERCPU_ARRAY(signal_data_map, controlplane_signal_t, 1);       // signal scratch map
 BPF_HASH(logs_count, bpf_log_t, bpf_log_count_t, 4096);            // logs count
 BPF_PERCPU_ARRAY(scratch_map, scratch_t, 1);                       // scratch space to avoid allocating stuff on the stack
+
+BPF_LRU_HASH(file_io_map, file_io_key_t, merge_stats_t, 10240);   // hold file data to decide if should submit vfs_file_* event
 BPF_LRU_HASH(file_modification_map, file_mod_key_t, int, 10240);   // hold file data to decide if should submit file modification event
 BPF_LRU_HASH(io_file_path_cache_map, file_id_t, path_buf_t, 5);    // store cache for IO operations path
 BPF_LRU_HASH(elf_files_map, file_id_t, bool, 64);                  // store cache for file ELF type check

@@ -31,6 +31,7 @@
 #include <common/context.h>
 #include <common/filesystem.h>
 #include <common/filtering.h>
+#include <common/merging.h>
 #include <common/kconfig.h>
 #include <common/ksymbols.h>
 #include <common/logging.h>
@@ -631,8 +632,7 @@ int tracepoint__sched__sched_process_fork(struct bpf_raw_tracepoint_args *ctx)
 // number of iterations - value that the verifier was seen to cope with - the higher, the better
 #define MAX_NUM_MODULES 600
 
-enum
-{
+enum {
     PROC_MODULES = 1 << 0,
     KSET = 1 << 1,
     MOD_TREE = 1 << 2,
@@ -1176,6 +1176,8 @@ int tracepoint__sched__sched_process_exec(struct bpf_raw_tracepoint_args *ctx)
     __builtin_memset(proc_info->binary.path, 0, MAX_BIN_PATH_SIZE);
     bpf_probe_read_str(proc_info->binary.path, MAX_BIN_PATH_SIZE, file_path);
     proc_info->binary.mnt_id = p.event->context.task.mnt_id;
+    proc_info->binary.inode = get_inode_nr_from_file(file);
+
 
     if (!should_trace(&p))
         return 0;
@@ -1682,8 +1684,7 @@ statfunc void *get_trace_probe_from_trace_event_call(struct trace_event_call *ca
     return tracep_ptr;
 }
 
-enum bpf_attach_type_e
-{
+enum bpf_attach_type_e {
     BPF_RAW_TRACEPOINT,
     PERF_TRACEPOINT,
     PERF_KPROBE,
@@ -2765,8 +2766,7 @@ int BPF_KPROBE(trace_security_socket_setsockopt)
     return events_perf_submit(&p, SECURITY_SOCKET_SETSOCKOPT, 0);
 }
 
-enum bin_type_e
-{
+enum bin_type_e {
     SEND_VFS_WRITE = 1,
     SEND_MPROTECT,
     SEND_KERNEL_MODULE,
@@ -3004,6 +3004,37 @@ do_file_io_operation(struct pt_regs *ctx, u32 event_id, u32 tail_call_id, bool i
     // Calculate write start offset
     if (start_pos != 0)
         start_pos -= io_bytes_amount;
+
+    u32 uid = get_task_real_uid(p.event->task);
+    u32 pid = p.event->context.task.host_pid;
+    unsigned long task_inode = get_task_inode_nr(pid);
+    u64 io_timestamp = bpf_ktime_get_ns();
+
+    file_io_key_t io_key = {};
+    io_key.target_device = file_info.id.device;
+    io_key.target_inode = file_info.id.inode;
+    io_key.task_inode = task_inode;
+    io_key.uid = uid;
+    io_key.is_read = is_read;
+
+    merge_stats_t *io_stats;
+    bool should_merge = 0;
+    io_stats = bpf_map_lookup_elem(&file_io_map, &io_key);
+
+    if (io_stats != NULL) {
+        should_merge = should_merge_event(io_timestamp, io_stats);
+        bpf_map_update_elem(&file_io_map, &io_key, io_stats, BPF_ANY);
+    } else {
+        io_stats = init_io_merge_stats(&io_key, io_timestamp);
+        bpf_printk("merge - io_stats is null\n");
+    }
+
+    if (likely(should_merge)) {
+        should_submit_io = 0;
+        bpf_printk("merge - merging io\n");
+    } else {
+        bpf_printk("merge - not merging io\n");
+    }
 
     if (should_submit_io) {
         save_str_to_buf(&p.event->args_buf, file_info.pathname_p, 0);
@@ -4512,8 +4543,7 @@ int BPF_KPROBE(trace_ret_kallsyms_lookup_name)
     return events_perf_submit(&p, KALLSYMS_LOOKUP_NAME, 0);
 }
 
-enum signal_handling_method_e
-{
+enum signal_handling_method_e {
     SIG_DFL,
     SIG_IGN,
     SIG_HND = 2 // Doesn't exist in the kernel, but signifies that the method is through
@@ -6360,7 +6390,8 @@ int cgroup_mkdir_signal(struct bpf_raw_tracepoint_args *ctx)
         should_update = false;
 
     if (should_update) {
-        // Assume this is a new container. If not, userspace code will delete this entry
+        // Assume this is a new container. If not, userspace code will delete this
+        // entry
         u8 state = CONTAINER_CREATED;
         bpf_map_update_elem(&containers_map, &cgroup_id_lsb, &state, BPF_ANY);
     }
@@ -6408,9 +6439,11 @@ int cgroup_rmdir_signal(struct bpf_raw_tracepoint_args *ctx)
 
 // Processes Lifecycle
 
-// NOTE: sched_process_fork is called by kernel_clone(), which is executed during
-//       clone() calls as well, not only fork(). This means that sched_process_fork()
-//       is also able to pick the creation of LWPs through clone().
+// NOTE: sched_process_fork is called by kernel_clone(), which is executed
+// during
+//       clone() calls as well, not only fork(). This means that
+//       sched_process_fork() is also able to pick the creation of LWPs through
+//       clone().
 
 SEC("raw_tracepoint/sched_process_fork")
 int sched_process_fork_signal(struct bpf_raw_tracepoint_args *ctx)
@@ -6428,24 +6461,29 @@ int sched_process_fork_signal(struct bpf_raw_tracepoint_args *ctx)
     //
     // Every task (a process or a thread) is represented by a `task_struct`:
     //
-    // - `pid`: Inside the `task_struct`, there's a field called `pid`. This is a unique identifier
-    //   for every task, which can be thought of as the thread ID (TID) from a user space
-    //   perspective. Every task, whether it's the main thread of a process or an additional thread,
-    //   has a unique `pid`.
+    // - `pid`: Inside the `task_struct`, there's a field called `pid`. This is a
+    // unique identifier
+    //   for every task, which can be thought of as the thread ID (TID) from a
+    //   user space perspective. Every task, whether it's the main thread of a
+    //   process or an additional thread, has a unique `pid`.
     //
-    // - `tgid` (Thread Group ID): This field in the `task_struct` is used to group threads from the
-    //   same process. For the main thread of a process, the `tgid` is the same as its `pid`. For
-    //   other threads created by that process, the `tgid` matches the `pid` of the main thread.
+    // - `tgid` (Thread Group ID): This field in the `task_struct` is used to
+    // group threads from the
+    //   same process. For the main thread of a process, the `tgid` is the same as
+    //   its `pid`. For other threads created by that process, the `tgid` matches
+    //   the `pid` of the main thread.
     //
     // In userspace:
     //
     // - `getpid()` returns the TGID, effectively the traditional process ID.
-    // - `gettid()` returns the PID (from the `task_struct`), effectively the thread ID.
+    // - `gettid()` returns the PID (from the `task_struct`), effectively the
+    // thread ID.
     //
-    // This design in the Linux kernel leads to a unified handling of processes and threads. In the
-    // kernel's view, every thread is a task with potentially shared resources, but each has a
-    // unique PID. In user space, the distinction is made where processes have a unique PID, and
-    // threads within those processes have unique TIDs.
+    // This design in the Linux kernel leads to a unified handling of processes
+    // and threads. In the kernel's view, every thread is a task with potentially
+    // shared resources, but each has a unique PID. In user space, the distinction
+    // is made where processes have a unique PID, and threads within those
+    // processes have unique TIDs.
 
     // Summary:
     // userland pid = kernel tgid
@@ -6490,21 +6528,24 @@ int sched_process_fork_signal(struct bpf_raw_tracepoint_args *ctx)
     save_to_submit_buf(&signal->args_buf, (void *) &parent_ns_pid, sizeof(int), 4);
     save_to_submit_buf(&signal->args_buf, (void *) &parent_start_time, sizeof(u64), 5);
 
-    // Child (might be a thread or a process, sched_process_fork trace is calle by clone() also).
+    // Child (might be a thread or a process, sched_process_fork trace is calle by
+    // clone() also).
     save_to_submit_buf(&signal->args_buf, (void *) &child_tid, sizeof(int), 6);
     save_to_submit_buf(&signal->args_buf, (void *) &child_ns_tid, sizeof(int), 7);
     save_to_submit_buf(&signal->args_buf, (void *) &child_pid, sizeof(int), 8);
     save_to_submit_buf(&signal->args_buf, (void *) &child_ns_pid, sizeof(int), 9);
     save_to_submit_buf(&signal->args_buf, (void *) &child_start_time, sizeof(u64), 10);
 
-    // Up Parent: always a real process (might be the same as Parent if it is a real process).
+    // Up Parent: always a real process (might be the same as Parent if it is a
+    // real process).
     save_to_submit_buf(&signal->args_buf, (void *) &up_parent_tid, sizeof(int), 11);
     save_to_submit_buf(&signal->args_buf, (void *) &up_parent_ns_tid, sizeof(int), 12);
     save_to_submit_buf(&signal->args_buf, (void *) &up_parent_pid, sizeof(int), 13);
     save_to_submit_buf(&signal->args_buf, (void *) &up_parent_ns_pid, sizeof(int), 14);
     save_to_submit_buf(&signal->args_buf, (void *) &up_parent_start_time, sizeof(u64), 15);
 
-    // Leader: always a real process (might be the same as the Child if child is a real process).
+    // Leader: always a real process (might be the same as the Child if child is a
+    // real process).
     save_to_submit_buf(&signal->args_buf, (void *) &leader_tid, sizeof(int), 16);
     save_to_submit_buf(&signal->args_buf, (void *) &leader_ns_tid, sizeof(int), 17);
     save_to_submit_buf(&signal->args_buf, (void *) &leader_pid, sizeof(int), 18);

@@ -35,6 +35,7 @@ type Config struct {
 	EngineConfig       engine.Config
 	MetricsEnabled     bool
 	DNSCacheConfig     dnscache.Config
+	EventsMergeConfig  MergeConfig
 }
 
 // Validate does static validation of the configuration
@@ -208,4 +209,15 @@ type PrinterConfig struct {
 	OutFile       io.WriteCloser
 	ContainerMode ContainerMode
 	RelativeTS    bool
+}
+
+type MergeMode struct {
+	BarrierIdx uint32
+	Interval   uint32
+	Threshold  uint64
+}
+
+type MergeConfig struct {
+	Barriers         [4]MergeMode
+	MaxMergeBarriers int
 }

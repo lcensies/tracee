@@ -30,6 +30,8 @@ statfunc u32 get_task_host_tgid(struct task_struct *task);
 statfunc struct task_struct *get_parent_task(struct task_struct *task);
 statfunc u32 get_task_exit_code(struct task_struct *task);
 statfunc int get_task_parent_flags(struct task_struct *task);
+statfunc int get_task_inode(struct task_struct *task);
+statfunc int get_task_real_uid(struct task_struct *task);
 statfunc const struct cred *get_task_real_cred(struct task_struct *task);
 
 // FUNCTIONS
@@ -188,6 +190,22 @@ statfunc int get_task_parent_flags(struct task_struct *task)
 statfunc const struct cred *get_task_real_cred(struct task_struct *task)
 {
     return BPF_CORE_READ(task, real_cred);
+}
+
+statfunc int get_task_real_uid(struct task_struct *task)
+{
+    const struct cred *real_cred = get_task_real_cred(task);
+    return BPF_CORE_READ(real_cred, uid.val);
+}
+
+// TODO: consider moving it or changing signature
+statfunc unsigned long get_task_inode_nr(u32 pid)
+{
+    proc_info_t *proc = bpf_map_lookup_elem(&proc_info_map, &pid);
+    if (unlikely(proc == NULL)) {
+        return -1;
+    }
+    return proc->binary.inode;
 }
 
 #endif

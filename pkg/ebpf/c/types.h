@@ -37,8 +37,7 @@ typedef struct event_context {
     u16 processor_id; // ID of the processor that processed the event
 } event_context_t;
 
-enum event_id_e
-{
+enum event_id_e {
     // Net events IDs
     NET_PACKET_BASE = 700,
     NET_PACKET_IP,
@@ -126,8 +125,7 @@ enum event_id_e
     MAX_EVENT_ID,
 };
 
-enum signal_event_id_e
-{
+enum signal_event_id_e {
     SIGNAL_CGROUP_MKDIR = 5000,
     SIGNAL_CGROUP_RMDIR,
     SIGNAL_SCHED_PROCESS_FORK,
@@ -139,8 +137,7 @@ typedef struct args {
     unsigned long args[6];
 } args_t;
 
-enum argument_type_e
-{
+enum argument_type_e {
     NONE_T = 0UL,
     INT_T,
     UINT_T,
@@ -164,13 +161,11 @@ enum argument_type_e
     TYPE_MAX = 255UL
 };
 
-enum internal_hook_e
-{
+enum internal_hook_e {
     EXEC_BINPRM = 80000,
 };
 
-enum mem_prot_alert_e
-{
+enum mem_prot_alert_e {
     ALERT_MMAP_W_X = 1,
     ALERT_MPROT_X_ADD,
     ALERT_MPROT_W_ADD,
@@ -191,14 +186,12 @@ typedef struct fd_arg_path {
 } fd_arg_path_t;
 
 // Flags in each task's context
-enum context_flags_e
-{
+enum context_flags_e {
     CONTAINER_STARTED_FLAG = (1 << 0), // mark the task's container have started
     IS_COMPAT_FLAG = (1 << 1)          // is the task running in compatible mode
 };
 
-enum container_state_e
-{
+enum container_state_e {
     CONTAINER_UNKNOWN = 0, // mark that container state is unknown
     CONTAINER_EXISTED,     // container existed before tracee was started
     CONTAINER_CREATED,     // new cgroup path created
@@ -231,6 +224,7 @@ typedef struct file_info {
 typedef struct binary {
     u32 mnt_id;
     char path[MAX_BIN_PATH_SIZE];
+    unsigned long inode;
 } binary_t;
 
 typedef struct io_data {
@@ -290,6 +284,11 @@ typedef struct equality {
     u64 equality_set_in_scopes;
 } eq_t;
 
+typedef struct merge_stats {
+    u64 count;
+    u64 last_seen_time;
+} merge_stats_t;
+
 typedef struct config_entry {
     u32 tracee_pid;
     u32 options;
@@ -336,8 +335,7 @@ typedef struct event_config {
     u64 param_types;
 } event_config_t;
 
-enum capture_options_e
-{
+enum capture_options_e {
     NET_CAP_OPT_FILTERED = (1 << 0), // pcap should obey event filters
 };
 
@@ -380,16 +378,14 @@ typedef struct controlplane_signal {
 
 #define BPF_MAX_LOG_FILE_LEN 72
 
-enum bpf_log_level
-{
+enum bpf_log_level {
     BPF_LOG_LVL_DEBUG = -1,
     BPF_LOG_LVL_INFO,
     BPF_LOG_LVL_WARN,
     BPF_LOG_LVL_ERROR,
 };
 
-enum bpf_log_id
-{
+enum bpf_log_id {
     BPF_LOG_ID_UNSPEC = 0U, // enforce enum to u32
 
     // tracee functions
@@ -528,8 +524,15 @@ typedef struct file_mod_key {
     unsigned long inode;
 } file_mod_key_t;
 
-enum file_modification_op
-{
+typedef struct file_io_key {
+    dev_t target_device;
+    unsigned long target_inode;
+    unsigned long task_inode;
+    uid_t uid; // real UID of the task
+    bool is_read;
+} file_io_key_t;
+
+enum file_modification_op {
     FILE_MODIFICATION_SUBMIT = 0,
     FILE_MODIFICATION_DONE,
 };
