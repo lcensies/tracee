@@ -192,15 +192,15 @@ func fetchMetrics(prom promv1.API, now time.Time, outputMode OutputMode) {
 		},
 		cached: {
 			queryName: "cached_events",
-			query:     "max_over_time(tracee_ebpf_events_cached[5s])",
+			query:     "max_over_time(tracee_ebpf_events_cached[3s])",
 		},
 		cacheload: {
 			queryName: "cache_load",
-			query:     "max_over_time(tracee_ebpf_cache_load[5s])",
+			query:     "max_over_time(tracee_ebpf_cache_load[3s])",
 		},
 		cpuseconds: {
 			queryName: "tracee_cpu_percent",
-			query:     "irate(process_cpu_seconds_total{job=\"tracee\"}[5m]) * 100",
+			query:     "irate(process_cpu_seconds_total{job=\"tracee\"}[3m]) * 100",
 		},
 		memload: {
 			queryName: "memory_consumption",
