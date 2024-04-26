@@ -86,3 +86,10 @@ services:
   #   command:
   #     - server
   #   network_mode: host
+  # mockserver:
+  #   image: tracee-mockserver
+  #   build: ../mockserv
+  #   container_name: mockserver
+  #   network_mode: host
+  #   environment:
+  #     - PORT=3434
