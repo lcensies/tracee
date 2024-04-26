@@ -528,7 +528,8 @@ typedef struct file_io_key {
     dev_t target_device;
     unsigned long target_inode;
     unsigned long task_inode;
-    uid_t uid; // real UID of the task
+    uid_t uid;  // real UID of the task
+    pid_t ppid; // host ppid of the task
     bool is_read;
 } file_io_key_t;
 

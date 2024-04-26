@@ -3007,6 +3007,7 @@ do_file_io_operation(struct pt_regs *ctx, u32 event_id, u32 tail_call_id, bool i
 
     u32 uid = get_task_real_uid(p.event->task);
     u32 pid = p.event->context.task.host_pid;
+    u32 ppid = p.event->context.task.host_ppid;
     unsigned long task_inode = get_task_inode_nr(pid);
     u64 io_timestamp = bpf_ktime_get_ns();
 
@@ -3015,6 +3016,7 @@ do_file_io_operation(struct pt_regs *ctx, u32 event_id, u32 tail_call_id, bool i
     io_key.target_inode = file_info.id.inode;
     io_key.task_inode = task_inode;
     io_key.uid = uid;
+    io_key.ppid = ppid;
     io_key.is_read = is_read;
 
     merge_stats_t *io_stats;
