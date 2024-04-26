@@ -40,24 +40,31 @@ func (t *Tracee) handleEvents(ctx context.Context, initialized chan<- struct{}) 
 		return true
 	}
 
-	// Decode stage: events are read from the perf buffer and decoded into trace.Event type.
-
-	// Cache stage: events go through a caching function.
-
-	// logger.Debugw("Decode is first?", "decodeIsFirst")
 	if decodeIsFirst() {
-		logger.Debugw("pipeline - decoding is first")
+		logger.Debugw("pipeline - decode is first")
+		// Decode stage: events are read from the perf buffer and decoded into trace.Event type.
 		eventsChan, errc = t.decodeEvents(ctx, t.eventsChannel)
 		errcList = append(errcList, errc)
-		eventsChan, errc = t.queueEvents(ctx, eventsChan)
-		errcList = append(errcList, errc)
+
+		// Cache stage: events go through a caching function.
+		if t.config.Cache != nil {
+			logger.Debugw("pipeline - start queue events")
+			eventsChan, errc = t.queueEvents(ctx, eventsChan)
+			errcList = append(errcList, errc)
+		}
 	} else {
-		logger.Debugw("pipeline - caching is first")
-		rawEventsChan, errc := t.queueRawEvents(ctx, t.eventsChannel)
+		logger.Debugw("pipeline - cache is first")
+		var rawEventsChan chan []byte
+
+		// Cache stage: raw events go through a caching function.
+		if t.config.Cache != nil {
+			rawEventsChan, errc = t.queueRawEvents(ctx, t.eventsChannel)
+			errcList = append(errcList, errc)
+		}
+
+		// Decode stage: events are read from rawEventsChan and decoded into trace.Event type.
+		eventsChan, errc = t.decodeEvents(ctx, rawEventsChan)
 		errcList = append(errcList, errc)
-		eventsChanx, errcx := t.decodeEvents(ctx, rawEventsChan)
-		eventsChan = eventsChanx
-		errcList = append(errcList, errcx)
 	}
 
 	// Sort stage: events go through a sorting function.
@@ -521,7 +528,7 @@ func (t *Tracee) processEvents(ctx context.Context, in <-chan *trace.Event) (
 		defer close(errc)
 
 		for event := range in { // For each received event...
-			logger.Debugw("pipeline - processing event")
+			// logger.Debugw("pipeline - processing event")
 			if event == nil {
 				continue // might happen during initialization (ctrl+c seg faults)
 			}
