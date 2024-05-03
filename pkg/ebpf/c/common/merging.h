@@ -14,21 +14,14 @@ statfunc merge_stats_t *init_io_merge_stats(file_io_key_t *io_key, u64 timestamp
 
 // FUNCTIONS
 
-#define SUBMIT_INTERVAL 20000000000 // 20s
+#define SUBMIT_INTERVAL 30000000000 // 30s
 
 statfunc bool should_merge_event(u64 timestamp, merge_stats_t *stats)
 {
     bool merge_needed = 1;
-    stats->count = stats->count + 1;
 
     if ((timestamp - stats->last_seen_time) > (u64) SUBMIT_INTERVAL) {
         merge_needed = 0;
-    }
-
-    if (merge_needed) {
-        bpf_printk("merge - merge needed\n");
-    } else {
-        bpf_printk("merge - only %d events\n", stats->count);
     }
 
     stats->last_seen_time = timestamp;
@@ -40,7 +33,6 @@ statfunc merge_stats_t *init_io_merge_stats(file_io_key_t *io_key, u64 timestamp
     merge_stats_t stats = {};
     __builtin_memset(&stats, 0, sizeof(stats));
 
-    stats.count = 0;
     stats.last_seen_time = timestamp;
 
     bpf_map_update_elem(&file_io_map, io_key, &stats, BPF_NOEXIST);

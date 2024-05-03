@@ -285,7 +285,6 @@ typedef struct equality {
 } eq_t;
 
 typedef struct merge_stats {
-    u64 count;
     u64 last_seen_time;
 } merge_stats_t;
 
