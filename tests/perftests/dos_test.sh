@@ -9,7 +9,7 @@ TEST_TYPE=pgbench
 TEST_DURATION=60
 
 DOCKER_INTERACTIVE_FLAG=-d
-DOCKER_TRACEE_IMAGE=tracee:latest
+DOCKER_TRACEE_IMAGE=tracee:events_merging_disabled
 # DOCKER_IMAGE=aquasec/tracee:latest
 
 DOCKER_POSTGRES_IMAGE=postgres:16.2
@@ -47,7 +47,7 @@ DOS_N_FAKE_COMMANDS="20000"
 DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123 >> /tmp/other_file && cat /tmp/other_file'
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-"0.8"}
 # DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
-TRACEE_CPU_LIMIT=${TRACEE_CPU_LIMIT:-"1"}
+TRACEE_CPU_LIMIT=${TRACEE_CPU_LIMIT:-"0.1"}
 TRACEE_NO_CONTAINER=true
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
