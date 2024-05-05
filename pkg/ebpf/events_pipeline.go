@@ -528,7 +528,6 @@ func (t *Tracee) processEvents(ctx context.Context, in <-chan *trace.Event) (
 		defer close(errc)
 
 		for event := range in { // For each received event...
-			// logger.Debugw("pipeline - processing event")
 			if event == nil {
 				continue // might happen during initialization (ctrl+c seg faults)
 			}
