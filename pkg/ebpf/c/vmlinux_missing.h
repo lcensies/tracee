@@ -84,8 +84,7 @@
 #define _IOW(type, nr, size)   _IOC(_IOC_WRITE, (type), (nr), (_IOC_TYPECHECK(size)))
 #define PERF_EVENT_IOC_SET_BPF _IOW('$', 8, __u32)
 
-enum perf_type_id
-{
+enum perf_type_id {
     PERF_TYPE_HARDWARE = 0,
     PERF_TYPE_SOFTWARE = 1,
     PERF_TYPE_TRACEPOINT = 2,
@@ -174,6 +173,14 @@ enum perf_type_id
 #define S_ISUID  0004000
 #define S_ISGID  0002000
 #define S_ISVTX  0001000
+
+#define S_ISLNK(m)  (((m) &S_IFMT) == S_IFLNK)
+#define S_ISREG(m)  (((m) &S_IFMT) == S_IFREG)
+#define S_ISDIR(m)  (((m) &S_IFMT) == S_IFDIR)
+#define S_ISCHR(m)  (((m) &S_IFMT) == S_IFCHR)
+#define S_ISBLK(m)  (((m) &S_IFMT) == S_IFBLK)
+#define S_ISFIFO(m) (((m) &S_IFMT) == S_IFIFO)
+#define S_ISSOCK(m) (((m) &S_IFMT) == S_IFSOCK)
 
 #define CAP_OPT_NONE    0x0
 #define CAP_OPT_NOAUDIT 0b10

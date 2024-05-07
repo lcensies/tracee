@@ -2949,6 +2949,20 @@ statfunc bool should_submit_io_event(u32 event_id, program_data_t *p)
             should_submit(event_id, p->event));
 }
 
+statfunc bool filter_file_io_type(u64 mode)
+{
+    if (S_ISDIR(mode) || S_ISLNK(mode)) {
+        return true;
+    }
+
+    if (!S_ISREG(mode)) {
+        // bpf_printk("filtering non regular files");
+        return false;
+    }
+
+    return true;
+}
+
 /** do_file_io_operation - generic file IO (read and write) event creator.
  *
  * @ctx:            the state of the registers prior the hook.
@@ -2996,6 +3010,11 @@ do_file_io_operation(struct pt_regs *ctx, u32 event_id, u32 tail_call_id, bool i
     // Extract device id, inode number, and pos (offset)
     file_info.id.device = get_dev_from_file(file);
     file_info.id.inode = get_inode_nr_from_file(file);
+
+    int inode_mode = get_inode_mode_from_file(file);
+    if (!filter_file_io_type(inode_mode))
+        return 0;
+
     bpf_probe_read(&start_pos, sizeof(off_t), pos);
 
     bool char_dev = (start_pos == 0);
