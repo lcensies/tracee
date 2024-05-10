@@ -45,7 +45,8 @@ TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$
 # --output [webho3k|forward]:[protocol://user:pass@]host:port[?k=v#f]
 TRACEE_OUTPUT_FLAGS="--output webhook:$WEBHOOK_ADDR"
 TRACEE_LOG_FLAGS="--log info --log file:$TRACEE_LOG_FILE"
-TRACEE_FEATURE_FLAGS="--proctree source=events"
+# TRACEE_FEATURE_FLAGS="--proctree source=events -o option:sort-events"
+TRACEE_FEATURE_FLAGS=""
 
 TRACEE_FLAGS="$TRACEE_LOG_FLAGS $TRACEE_FEATURE_FLAGS $TRACEE_OUTPUT_FLAGS $TRACEE_CACHE_FLAGS --metrics --healthz=true  -e $TRACEE_EVENTS"
 # TRACEE_FLAGS="--config /etc/tracee/config.yaml"
