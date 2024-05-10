@@ -2951,16 +2951,15 @@ statfunc bool should_submit_io_event(u32 event_id, program_data_t *p)
 
 statfunc bool filter_file_io_type(u64 mode)
 {
+    if (S_ISREG(mode)) {
+        return true;
+    }
+
     if (S_ISDIR(mode) || S_ISLNK(mode)) {
         return true;
     }
 
-    if (!S_ISREG(mode)) {
-        // bpf_printk("filtering non regular files");
-        return false;
-    }
-
-    return true;
+    return false;
 }
 
 /** do_file_io_operation - generic file IO (read and write) event creator.
@@ -3047,14 +3046,14 @@ do_file_io_operation(struct pt_regs *ctx, u32 event_id, u32 tail_call_id, bool i
         bpf_map_update_elem(&file_io_map, &io_key, io_stats, BPF_ANY);
     } else {
         io_stats = init_io_merge_stats(&io_key, io_timestamp);
-        bpf_printk("merge - io_stats is null\n");
+        // bpf_printk("merge - io_stats is null\n");
     }
 
     if (likely(should_merge)) {
         should_submit_io = 0;
-        bpf_printk("merge - merging io\n");
+        // bpf_printk("merge - merging io\n");
     } else {
-        bpf_printk("merge - not merging io\n");
+        // bpf_printk("merge - not merging io\n");
     }
 
     if (should_submit_io) {
