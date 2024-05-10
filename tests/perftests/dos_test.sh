@@ -34,16 +34,12 @@ TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$
 # TRACEE_OUTPUT_FILE="/tmp/tracee/output.json"
 # TRACEE_OUTPUT_FLAGS="--output json --output out-file:${TRACEE_OUTPUT_FILE}"
 # TRACEE_OUTPUT_FLAGS="--output none"
-TRACEE_OUTPUT_FLAGS="--output webhook:$WEBHOOK_ADDR"
-
-# host: port: 3434
-
 # --output [webho3k|forward]:[protocol://user:pass@]host:port[?k=v#f]
+TRACEE_OUTPUT_FLAGS="--output webhook:$WEBHOOK_ADDR"
 
 TRACEE_LOG_FLAGS="--log debug --log file:$TRACEE_LOG_FILE"
 
 TRACEE_FLAGS="$TRACEE_LOG_FLAGS $TRACEE_OUTPUT_FLAGS $TRACEE_CACHE_FLAGS --metrics --healthz=true  -e $TRACEE_EVENTS"
-
 # TRACEE_FLAGS="--config /etc/tracee/config.yaml"
 
 TRACEE_BENCH_CMD="go run $TRACEE_ROOT/cmd/tracee-bench/main.go --single=true --output json"

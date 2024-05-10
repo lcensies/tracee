@@ -1,10 +1,13 @@
-#!/bin/bash -ex
+#!/bin/bash -x
 
 # 1. Build tracee
 # 2. Create snapshot
 # 3. Invoke DoS
 # 4. Gather metrics
 # 5. Revert snapshot
+
+N_RUNS=1
+
 BUILD_TRACEE=false
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 
@@ -23,37 +26,35 @@ VM_SCP_CMD="scp -i $VM_SSH_PRIVKEY -P $VM_PORT -o StrictHostKeyChecking=no -o Us
 # for example, TRACEE_BENCHMARK_OUTPUT_FILE
 VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(env | sed 's/;/\;/g' | grep -E 'TRACEE|DOS')"
 
+OUTPUT_DIR=${OUTPUT_DIR:-~/repos/thesis_new/assets/pgbench}
+
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
-echo "TRACEE_ROOT: $TRACEE_ROOT"
+
+make run-mockserv
+# ensure tracee dir exists on host
+mkdir -p /tmp/tracee
 
 cd "$TRACEE_ROOT"
-# vagrant halt --force
-vagrant halt && vagrant up
 
-$BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
+run_test() {
+	vagrant reload
 
-# Build tracee if necesarry
-# $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
+	$BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
-# Invoke test
-$VM_SSH_CMD tests/perftests/dos_test.sh
+	# Invoke test
+	# TODO: auto exit
+	$VM_SSH_CMD "tests/perftests/dos_test.sh && exit"
 
-echo VM_SSH_ROOT: $VM_SSH_ROOT
-echo TRACEE_BENCHMARK_OUTPUT_FILE: "$TRACEE_BENCHMARK_OUTPUT_FILE"
-echo TRACEE_LOG_FILE: "$TRACEE_LOG_FILE"
+	# Fetch results back to host
+	$VM_SSH_CMD sudo chown -R vagrant:vagrant /tmp/tracee
+	$VM_SCP_CMD -r "$VM_SSH_ROOT:/tmp/tracee" /tmp
+}
 
-# Copy benchmark results and tracee logs to host
-# TODO: change to rsync
-$VM_SCP_CMD "$VM_SSH_ROOT:$TRACEE_BENCHMARK_OUTPUT_FILE" "$TRACEE_BENCHMARK_OUTPUT_FILE"
-$VM_SSH_CMD sudo chown vagrant:vagrant "$TRACEE_BENCHMARK_OUTPUT_FILE"
-
-# note that running tracee on host might break permissions
-# TODO: fix permissions
-$VM_SSH_CMD sudo cp /tmp/tracee/tracee.log /tmp/tracee.log
-$VM_SSH_CMD sudo chown vagrant:vagrant /tmp/tracee.log
-$VM_SCP_CMD "$VM_SSH_ROOT:/tmp/tracee.log" "$TRACEE_LOG_FILE"
-
-cat "$TRACEE_BENCHMARK_OUTPUT_FILE"
+for i in $(seq 1 $N_RUNS); do
+	run_test
+	mkdir -p "$OUTPUT_DIR/$i"
+	cp -r /tmp/tracee "$OUTPUT_DIR/$i"
+done
 
 # TODO: create snapshot only if it doesn't exist
 # $VAGRANT_CMD snapshot save tracee_vm base
