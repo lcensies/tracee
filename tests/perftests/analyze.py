@@ -47,6 +47,7 @@ print(mem_stats_timestamps)
 # matplotlib.use("QtAgg")
 plt.plot(mem_stats_timestamps, mem_stats_mb)
 
+
 # plt.title("Agent memory consumption")
 plt.xlabel("Time")
 plt.ylabel("Agent memory consumption (MB)")
@@ -54,4 +55,5 @@ plt.ylabel("Agent memory consumption (MB)")
 # axes = plt.axes()
 # axes.set_xlim([0, 120])
 
+plt.savefig("mem_consumption.png")
 plt.show()
