@@ -10,7 +10,7 @@
 
 statfunc bool should_merge_event(u64 timestamp, merge_stats_t *merge_stats);
 statfunc merge_stats_t *init_io_merge_stats(file_io_key_t *io_key, u64 timestamp);
-statfunc merge_stats_t *init_io_merge_stats(file_io_key_t *io_key, u64 timestamp);
+statfunc merge_stats_t *init_open_merge_stats(file_open_key_t *open_key, u64 timestamp);
 
 // FUNCTIONS
 
@@ -37,6 +37,17 @@ statfunc merge_stats_t *init_io_merge_stats(file_io_key_t *io_key, u64 timestamp
 
     bpf_map_update_elem(&file_io_map, io_key, &stats, BPF_NOEXIST);
     return bpf_map_lookup_elem(&file_io_map, io_key);
+}
+
+statfunc merge_stats_t *init_open_merge_stats(file_open_key_t *open_key, u64 timestamp)
+{
+    merge_stats_t stats = {};
+    __builtin_memset(&stats, 0, sizeof(stats));
+
+    stats.last_seen_time = timestamp;
+
+    bpf_map_update_elem(&file_open_map, open_key, &stats, BPF_NOEXIST);
+    return bpf_map_lookup_elem(&file_open_map, open_key);
 }
 
 #endif

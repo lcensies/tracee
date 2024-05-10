@@ -1,0 +1,66 @@
+{
+  "timestamp": 1713853154504551779,
+  "threadStartTime": 1713847849433289949,
+  "processorId": 3,
+  "processId": 3976,
+  "cgroupId": 2555,
+  "threadId": 3985,
+  "parentProcessId": 1,
+  "hostProcessId": 3976,
+  "hostThreadId": 3985,
+  "hostParentProcessId": 1,
+  "userId": 0,
+  "mountNamespace": 4026531841,
+  "pidNamespace": 4026531836,
+  "processName": "containerd-shim",
+  "executable": {
+    "path": ""
+  },
+  "hostName": "ubuntu-jammy",
+  "containerId": "",
+  "container": {},
+  "kubernetes": {},
+  "eventId": "719",
+  "eventName": "vfs_write",
+  "matchedPolicies": [
+    ""
+  ],
+  "argsNum": 5,
+  "returnValue": 91,
+  "syscall": "write",
+  "stackAddresses": null,
+  "contextFlags": {
+    "containerStarted": false,
+    "isCompat": false
+  },
+  "threadEntityId": 2039010740,
+  "processEntityId": 1346197594,
+  "parentEntityId": 1016811896,
+  "args": [
+    {
+      "name": "pathname",
+      "type": "const char*",
+      "value": "/run/docker/containerd/0171090dfca63c5b4affdac49bd3dfedfa38aeb30b252b5038559dd49d49adc6/0171090dfca63c5b4affdac49bd3dfedfa38aeb30b252b5038559dd49d49adc6-stdout"
+    },
+    {
+      "name": "dev",
+      "type": "dev_t",
+      "value": 24
+    },
+    {
+      "name": "inode",
+      "type": "unsigned long",
+      "value": 1930
+    },
+    {
+      "name": "count",
+      "type": "size_t",
+      "value": 91
+    },
+    {
+      "name": "pos",
+      "type": "off_t",
+      "value": 0
+    }
+  ]
+}

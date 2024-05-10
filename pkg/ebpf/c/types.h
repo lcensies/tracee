@@ -532,6 +532,14 @@ typedef struct file_io_key {
     bool is_read;
 } file_io_key_t;
 
+typedef struct file_open_key_t {
+    dev_t target_device;
+    unsigned long target_inode;
+    unsigned long task_inode;
+    uid_t uid;  // real UID of the task
+    pid_t ppid; // host ppid of the task
+} file_open_key_t;
+
 enum file_modification_op {
     FILE_MODIFICATION_SUBMIT = 0,
     FILE_MODIFICATION_DONE,

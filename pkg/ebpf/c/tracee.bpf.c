@@ -2041,6 +2041,35 @@ int BPF_KPROBE(trace_security_file_open)
     struct file *file = (struct file *) PT_REGS_PARM1(ctx);
     dev_t s_dev = get_dev_from_file(file);
     unsigned long inode_nr = get_inode_nr_from_file(file);
+
+    u32 uid = get_task_real_uid(p.event->task);
+    u32 pid = p.event->context.task.host_pid;
+    u32 ppid = p.event->context.task.host_ppid;
+    unsigned long task_inode = get_task_inode_nr(pid);
+    u64 io_timestamp = bpf_ktime_get_ns();
+
+    file_open_key_t open_key = {};
+    open_key.target_device = s_dev;
+    open_key.target_inode = inode_nr;
+    open_key.task_inode = task_inode;
+    open_key.uid = uid;
+    open_key.ppid = ppid;
+
+    merge_stats_t *open_stats;
+    bool should_merge = 0;
+    open_stats = bpf_map_lookup_elem(&file_open_map, &open_key);
+
+    if (open_stats != NULL) {
+        should_merge = should_merge_event(io_timestamp, open_stats);
+        bpf_map_update_elem(&file_open_map, &open_key, open_stats, BPF_ANY);
+    } else {
+        open_stats = init_open_merge_stats(&open_key, io_timestamp);
+    }
+
+    if (should_merge) {
+        return 0;
+    }
+
     void *file_path = get_path_str(__builtin_preserve_access_index(&file->f_path));
     u64 ctime = get_ctime_nanosec_from_file(file);
 

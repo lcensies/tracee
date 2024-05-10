@@ -116,7 +116,8 @@ BPF_PERCPU_ARRAY(signal_data_map, controlplane_signal_t, 1);       // signal scr
 BPF_HASH(logs_count, bpf_log_t, bpf_log_count_t, 4096);            // logs count
 BPF_PERCPU_ARRAY(scratch_map, scratch_t, 1);                       // scratch space to avoid allocating stuff on the stack
 
-BPF_LRU_HASH(file_io_map, file_io_key_t, merge_stats_t, 10240);   // hold file data to decide if should submit vfs_file_* event
+BPF_LRU_HASH(file_io_map, file_io_key_t, merge_stats_t, 10240);   // hold file data to decide if should submit vfs_file_* events
+BPF_LRU_HASH(file_open_map, file_open_key_t, merge_stats_t, 10240);   // hold file data to decide if should submit security_file_open event
 BPF_LRU_HASH(file_modification_map, file_mod_key_t, int, 10240);   // hold file data to decide if should submit file modification event
 BPF_LRU_HASH(io_file_path_cache_map, file_id_t, path_buf_t, 5);    // store cache for IO operations path
 BPF_LRU_HASH(elf_files_map, file_id_t, bool, 64);                  // store cache for file ELF type check
