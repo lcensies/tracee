@@ -1,0 +1,62 @@
+#!/bin/bash -x
+
+# 1. Build tracee
+# 2. Create snapshot
+# 3. Invoke DoS
+# 4. Gather metrics
+# 5. Revert snapshot
+
+N_RUNS=1
+
+BUILD_TRACEE=false
+TRACEE_ROOT=$(git rev-parse --show-toplevel)
+
+# VAGRANT_CMD="cd $TRACEE_ROOT && vagrant "
+
+# TODO: discover forwarded port and auto choose it for SSH_CMD
+# default: 22 (guest) => 2222 (host) (adapter 1)
+VM_PORT=2222
+VM_SSH_PRIVKEY="$TRACEE_ROOT/.vagrant/machines/default/virtualbox/private_key"
+
+VM_SSH_ROOT="vagrant@127.0.0.1"
+VM_SSH_OPTS="-i $VM_SSH_PRIVKEY -p $VM_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+VM_SCP_CMD="scp -i $VM_SSH_PRIVKEY -P $VM_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+# cd to tracee root directory inside VM by default
+# pass environmental variables that are starting from TRACEE or DOS prefix to remote host
+# for example, TRACEE_BENCHMARK_OUTPUT_FILE
+VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(env | sed 's/;/\;/g' | grep -E 'TRACEE|DOS')"
+
+OUTPUT_DIR=${OUTPUT_DIR:-~/repos/thesis_new/assets/pgbench}
+
+[[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
+
+make run-mockserv
+# ensure tracee dir exists on host
+mkdir -p /tmp/tracee
+
+cd "$TRACEE_ROOT"
+
+run_test() {
+	vagrant reload
+
+	$BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
+
+	# Invoke test
+	# TODO: auto exit
+	$VM_SSH_CMD "tests/perftests/dos_test.sh && exit"
+
+	# Fetch results back to host
+	$VM_SSH_CMD sudo chown -R vagrant:vagrant /tmp/tracee
+	$VM_SCP_CMD -r "$VM_SSH_ROOT:/tmp/tracee" /tmp
+}
+
+for i in $(seq 1 $N_RUNS); do
+	run_test
+	mkdir -p "$OUTPUT_DIR/$i"
+	cp -r /tmp/tracee "$OUTPUT_DIR/$i"
+done
+
+# TODO: create snapshot only if it doesn't exist
+# $VAGRANT_CMD snapshot save tracee_vm base
+# TODO: use CMD_VAGRANT
+# cd "$TRACEE_ROOT" && vagrant snapshot restore "$VM_NAME" base
