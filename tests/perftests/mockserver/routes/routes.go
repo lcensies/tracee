@@ -19,9 +19,10 @@ func NewRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(RequestCancelRecover(), gin.Recovery())
 
-	router.POST("/", HandleEventsSink)
 	router.GET("/", HandleEventsCount)
 	router.GET("/fileevents", HandleFileEventsCount)
+	router.POST("/", HandleEventsSink)
+	router.POST("/tslimit", HandleTimestampLimit)
 	router.POST("/reset", HandleEventsCountReset)
 
 	return router

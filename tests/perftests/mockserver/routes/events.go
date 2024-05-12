@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/aquasecurity/tracee/types/trace"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 var (
 	counter           models.EventCounter = map[string]int{}
 	fileEventsCounter                     = map[FileEventsSummary]int{}
+	timestampLimit    *time.Time
 )
 
 type FileEventsSummary struct {
@@ -30,6 +32,7 @@ type FileEventsSummary struct {
 
 var fileEvents map[string]string = map[string]string{
 	"vfs_write":          "vfs_write",
+	"vfs_writev":         "vfs_writev",
 	"vfs_read":           "vfs_read",
 	"vfs_readv":          "vfs_readv",
 	"security_file_open": "security_file_open",
@@ -82,6 +85,19 @@ func HandleEventsSink(c *gin.Context) {
 	eventJson, _ := json.Marshal(e)
 	log.Info().Msgf(string(eventJson))
 
+	if timestampLimit != nil {
+
+		log.Info().Msgf("Timestamp limit is present")
+		eventTs := time.Unix(int64(e.Timestamp), 0)
+
+		log.Info().Msgf("Timestamp limit is %v", timestampLimit)
+
+		if eventTs.After(*timestampLimit) {
+			log.Info().Msgf("Dropping event with ts %v (ts limit: %v)", eventTs, timestampLimit)
+			return
+		}
+	}
+
 	updateEventsSummary(&e)
 }
 
@@ -89,10 +105,13 @@ func HandleEventsCount(c *gin.Context) {
 	c.JSON(http.StatusOK, counter)
 }
 
+// TODO: rename
 func HandleEventsCountReset(c *gin.Context) {
 	log.Info().Msg("Clearing statistics")
 	counter = map[string]int{}
 	fileEventsCounter = map[FileEventsSummary]int{}
+
+	timestampLimit = nil
 }
 
 func HandleFileEventsCount(c *gin.Context) {
@@ -110,4 +129,21 @@ func HandleFileEventsCount(c *gin.Context) {
 		)
 	}
 	c.JSON(http.StatusOK, summaries)
+}
+
+func HandleTimestampLimit(c *gin.Context) {
+	type TimestampLimit struct {
+		Timestamp int `json:"timestamp"`
+	}
+
+	var tsLimit TimestampLimit
+	if err := c.BindJSON(&tsLimit); err != nil {
+		log.Error().Msgf("Failed to decode timestamp json: %v", err)
+		return
+	}
+
+	limit := time.Unix(int64(tsLimit.Timestamp), 0)
+
+	log.Info().Msgf("Setting events timestamp limit to %v", limit)
+	timestampLimit = &limit
 }
