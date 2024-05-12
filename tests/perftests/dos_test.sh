@@ -24,7 +24,6 @@ TRACEE_CPU_LIMIT=${TRACEE_CPU_LIMIT:-"0.1"}
 TRACEE_NO_CONTAINER=false
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 TRACEE_CACHE_TYPE=${TRACEE_CACHE_TYPE:-mem}
-TRACEE_CACHE_STAGE="after-decode"
 TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 # TRACEE_MEM_CACHE_SIZE=${TRACEE_MEM_CACHE_SIZE:-512}
 TRACEE_DISK_CACHE_SIZE=${TRACEE_DISK_CACHE_SIZE:-16384}
@@ -37,7 +36,7 @@ TRACEE_EXE=/tracee/tracee
 # --output [webhook|forward]:[protocol://user:pass@]host:port[?k=v#f]
 # --output out-file:/tmp/tracee/tracee.log -
 TRACEE_EVENTS=security_file_open,vfs_read,vfs_readv,vfs_write,creat,chmod,fchmod,chown,fchown,lchown,ptrace,setuid,setgid,setpgid,setsid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,init_module,fchownat,fchmodat,setns,process_vm_readv,process_vm_writev,finit_module,memfd_create,move_mount,sched_process_exec,security_inode_unlink,security_socket_connect,security_socket_accept,security_socket_bind,security_sb_mount,net_packet_icmp,net_packet_icmpv6,net_packet_dns_request,net_packet_dns_response,net_packet_http_request,net_packet_http_response
-TRACEE_CACHE_FLAGS="--cache cache-stage=$TRACEE_CACHE_STAGE --cache cache-type=$TRACEE_CACHE_TYPE --cache mem-cache-size=$TRACEE_MEM_CACHE_SIZE"
+TRACEE_CACHE_FLAGS="--cache cache-type=$TRACEE_CACHE_TYPE --cache mem-cache-size=$TRACEE_MEM_CACHE_SIZE"
 
 # TRACEE_OUTPUT_FILE="/tmp/tracee/output.json"
 # TRACEE_OUTPUT_FLAGS="--output json --output out-file:${TRACEE_OUTPUT_FILE}"
@@ -224,15 +223,15 @@ run_benchmark() {
 	fi
 }
 
-fetch_stats() {
+fetch_events_stats() {
 	curl "$WEBHOOK_ADDR" | sudo tee "$EVENTS_STATS_FILE"
 	curl "$WEBHOOK_ADDR/fileevents" | sudo tee "$FILE_IO_STATS_FILE"
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_lost" | jq ".data.result" | sudo tee "$EVENTS_LOST_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | jq ".data.result" | sudo tee "$TRACEE_CACHE_STATS_FILE"
 }
 
 fetch_mem_usage() {
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=process_resident_memory_bytes[120m]&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | jq ".data.result" | sudo tee "$TRACEE_CACHE_STATS_FILE"
 }
 
 # TODO: refactor
@@ -256,7 +255,7 @@ _main() {
 
 	wait_tracee_sink
 
-	fetch_stats
+	fetch_events_stats
 	sleep $POST_TEST_SLEEP_SEC
 	fetch_mem_usage
 
