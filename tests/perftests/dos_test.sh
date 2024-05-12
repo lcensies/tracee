@@ -89,7 +89,7 @@ DOS_MALICIOUS_COMMAND='>/tmp/some_file && date && echo 123 >> /tmp/other_file &&
 DOS_CPU_LIMIT=${DOS_CPU_LIMIT:-"0.8"}
 # DOS_CMD="while true; do cat /etc/passwd && date && sleep 0.2; done"
 
-start_prometheus() {
+run_prometheus() {
 	perf_compose="$TRACEE_ROOT/performance/dashboard/docker-compose.yml"
 	docker-compose -f "$perf_compose" up -d
 }
@@ -122,16 +122,18 @@ tracee_is_running() {
 	fi
 }
 
+# TODO: switch on workload type
+stop_workloads() {
+	stop_postgres
+	docker stop dos 2>/dev/null || :
+}
+
 # Teardown outdated instances of dos and tracee containers
 teardown() {
 	echo Tearing down existing tracee and dos containers
-	docker stop tracee dos 2>/dev/null || :
 
-	stop_postgres
-
-	while [ "$(tracee_is_running)" = "true" ]; do
-		sleep 0.1
-	done
+	stop_workloads
+	stop_tracee
 
 	clear_prometheus
 	clear_server
@@ -194,6 +196,15 @@ run_dos() {
 	docker kill dos 2>/dev/null || :
 }
 
+# TODO: switch to Makefile
+run_workload() {
+	case "$TEST_TYPE" in
+	"pgbench") run_pgbench ;;
+	"dos") run_dos ;;
+	*) echo invalid test type && exit 1 ;;
+	esac
+}
+
 # Wait until all events from cache are consumed
 wait_tracee_sink() {
 	cache_load=1
@@ -238,6 +249,10 @@ fetch_mem_usage() {
 stop_tracee() {
 	# sudo killall tracee 2>/dev/null || :
 	docker stop tracee 2>/dev/null || :
+
+	while [ "$(tracee_is_running)" = "true" ]; do
+		sleep 0.1
+	done
 }
 
 set_webhook_ts_limit() {
@@ -249,23 +264,18 @@ _main() {
 
 	teardown
 
-	start_prometheus
+	run_prometheus
 	run_tracee
-
-	case "$TEST_TYPE" in
-	"pgbench") run_pgbench ;;
-	"dos") run_dos ;;
-	*) echo invalid test type && exit 1 ;;
-	esac
+	run_workload
 
 	set_webhook_ts_limit
+	stop_workloads
 	wait_tracee_sink
 
 	fetch_events_stats
 	sleep $POST_TEST_SLEEP_SEC
 	fetch_mem_usage
 
-	# stop_tracee
 }
 
 _main
