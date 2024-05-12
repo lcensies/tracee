@@ -86,14 +86,10 @@ func HandleEventsSink(c *gin.Context) {
 	log.Info().Msgf(string(eventJson))
 
 	if timestampLimit != nil {
-
-		log.Info().Msgf("Timestamp limit is present")
 		eventTs := time.Unix(int64(e.Timestamp), 0)
 
-		log.Info().Msgf("Timestamp limit is %v", timestampLimit)
-
 		if eventTs.After(*timestampLimit) {
-			log.Info().Msgf("Dropping event with ts %v (ts limit: %v)", eventTs, timestampLimit)
+			log.Debug().Msgf("Dropping event with ts %v (ts limit: %v)", eventTs, timestampLimit)
 			return
 		}
 	}
