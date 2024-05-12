@@ -73,14 +73,14 @@ services:
       - 3000
     network_mode: "host"
 
-  pyroscope:
-    image: pyroscope/pyroscope:latest
-    container_name: tracee-pyroscope
-    restart: unless-stopped
-    environment:
-        - PYROSCOPE_LOG_LEVEL=info
-    expose:
-      - 4040
-    command:
-      - "server"
-    network_mode: "host"
+  # pyroscope:
+  #   image: pyroscope/pyroscope:latest
+  #   container_name: tracee-pyroscope
+  #   restart: unless-stopped
+  #   environment:
+  #       - PYROSCOPE_LOG_LEVEL=info
+  #   expose:
+  #     - 4040
+  #   command:
+  #     - "server"
+  #   network_mode: "host"
