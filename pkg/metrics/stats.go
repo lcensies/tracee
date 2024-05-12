@@ -6,6 +6,7 @@ import (
 	"github.com/aquasecurity/tracee/pkg/config"
 	"github.com/aquasecurity/tracee/pkg/counter"
 	"github.com/aquasecurity/tracee/pkg/errfmt"
+	"github.com/aquasecurity/tracee/pkg/logger"
 )
 
 // When updating this struct, please make sure to update the relevant exporting functions
@@ -92,18 +93,42 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Help:      "errors accumulated by tracee-ebpf",
 	}, func() float64 { return float64(stats.ErrorCount.Get()) }))
 
-	err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Namespace: "tracee_ebpf",
-		Name:      "events_cached",
-		Help:      "number of cached events",
-	}, func() float64 {
-		cache := traceeConfig.Cache
-		cacheSize := -1.0
-		if cache != nil {
-			cacheSize = float64(cache.Size())
-		}
-		return cacheSize
-	}))
+	// For some reason it returns maximum value even
+	// when the cache is empty
+	// err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	// 	Namespace: "tracee_ebpf",
+	// 	Name:      "events_cached",
+	// 	Help:      "number of cached events",
+	// }, func() float64 {
+	// 	cache := traceeConfig.Cache
+	// 	cacheSize := -1.0
+	// 	if cache != nil {
+	// 		cacheSize = float64(cache.Size())
+	// 	}
+	// 	return cacheSize
+	// }))
+	// if err != nil {
+	// 	return errfmt.WrapError(err)
+	// }
+
+	err = prometheus.Register(prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Namespace: "tracee_ebpf",
+			Name:      "cache_load",
+			Help:      "cache load factor in percents",
+		}, func() float64 {
+			cache := traceeConfig.Cache
+			cacheLoad := 0.0
+
+			if cache != nil {
+				cacheLoad = float64(cache.Size()) /
+					float64(cache.Capacity())
+			}
+
+			logger.Debugw("Fetching cache load", "cache_load", cacheLoad)
+
+			return cacheLoad
+		}))
 	if err != nil {
 		return errfmt.WrapError(err)
 	}
