@@ -92,7 +92,7 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Help:      "errors accumulated by tracee-ebpf",
 	}, func() float64 { return float64(stats.ErrorCount.Get()) }))
 
-	err = prometheus.Register(prometheus.NewCounterFunc(prometheus.CounterOpts{
+	err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Namespace: "tracee_ebpf",
 		Name:      "events_cached",
 		Help:      "number of cached events",
@@ -108,8 +108,7 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		return errfmt.WrapError(err)
 	}
 
-	// TODO: change to ConstMetric
-	err = prometheus.Register(prometheus.NewCounterFunc(prometheus.CounterOpts{
+	err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Namespace: "tracee_ebpf",
 		Name:      "cache_capacity",
 		Help:      "capacity of the cache in events",
