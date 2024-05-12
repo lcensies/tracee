@@ -39,7 +39,7 @@ func (r Runner) Run(ctx context.Context) error {
 			if r.HTTPServer != nil {
 				if r.HTTPServer.MetricsEndpointEnabled() {
 					r.TraceeConfig.MetricsEnabled = true // TODO: is this needed ?
-					if err := t.Stats().RegisterPrometheus(); err != nil {
+					if err := t.Stats().RegisterPrometheus(r.TraceeConfig); err != nil {
 						logger.Errorw("Registering prometheus metrics", "error", err)
 					}
 				}

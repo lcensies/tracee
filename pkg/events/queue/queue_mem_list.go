@@ -117,3 +117,11 @@ func (q *eventQueueMem) getQueueSizeInEvents() int {
 	// bigger hosts, cache = ~4GB in events #
 	return amountOfEvents(gbToMB(4))
 }
+
+func (q *eventQueueMem) Size() int {
+	return q.cache.Len()
+}
+
+func (q *eventQueueMem) Capacity() int {
+	return q.maxAmountOfEvents
+}

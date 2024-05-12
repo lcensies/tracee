@@ -15,7 +15,10 @@ import (
 )
 
 // engineEvents stage in the pipeline allows signatures detection to be executed in the pipeline
-func (t *Tracee) engineEvents(ctx context.Context, in <-chan *trace.Event) (<-chan *trace.Event, <-chan error) {
+func (t *Tracee) engineEvents(
+	ctx context.Context,
+	in <-chan *trace.Event,
+) (<-chan *trace.Event, <-chan error) {
 	out := make(chan *trace.Event)
 	errc := make(chan error, 1)
 
@@ -25,7 +28,9 @@ func (t *Tracee) engineEvents(ctx context.Context, in <-chan *trace.Event) (<-ch
 	source := engine.EventSources{Tracee: engineInput}
 
 	// Prepare built in data sources
-	t.config.EngineConfig.DataSources = append(t.config.EngineConfig.DataSources, t.PrepareBuiltinDataSources()...)
+	t.config.EngineConfig.DataSources = append(
+		t.config.EngineConfig.DataSources,
+		t.PrepareBuiltinDataSources()...)
 
 	// Share event states (by reference)
 	t.config.EngineConfig.ShouldDispatchEvent = func(eventIdInt32 int32) bool {
@@ -35,7 +40,11 @@ func (t *Tracee) engineEvents(ctx context.Context, in <-chan *trace.Event) (<-ch
 
 	sigEngine, err := engine.NewEngine(t.config.EngineConfig, source, engineOutput)
 	if err != nil {
-		logger.Fatalw("failed to start signature engine in \"everything is an event\" mode", "error", err)
+		logger.Fatalw(
+			"failed to start signature engine in \"everything is an event\" mode",
+			"error",
+			err,
+		)
 	}
 	t.sigEngine = sigEngine
 
@@ -48,7 +57,11 @@ func (t *Tracee) engineEvents(ctx context.Context, in <-chan *trace.Event) (<-ch
 
 	err = t.sigEngine.Init()
 	if err != nil {
-		logger.Fatalw("failed to initialize signature engine in \"everything is an event\" mode", "error", err)
+		logger.Fatalw(
+			"failed to initialize signature engine in \"everything is an event\" mode",
+			"error",
+			err,
+		)
 	}
 
 	go t.sigEngine.Start(ctx)
