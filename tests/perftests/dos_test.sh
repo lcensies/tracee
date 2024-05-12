@@ -240,6 +240,11 @@ stop_tracee() {
 	docker stop tracee 2>/dev/null || :
 }
 
+set_webhook_ts_limit() {
+	echo Setting events receiving timestamp limit to $(date)
+	curl -d "{\"timestamp\":$EPOCHSECONDS}" -H "Content-Type: application/json" -X POST $WEBHOOK_ADDR
+}
+
 _main() {
 
 	teardown
@@ -253,6 +258,7 @@ _main() {
 	*) echo invalid test type && exit 1 ;;
 	esac
 
+	set_webhook_ts_limit
 	wait_tracee_sink
 
 	fetch_events_stats
