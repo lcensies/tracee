@@ -1,9 +1,6 @@
 package routes
 
 import (
-	"bytes"
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -65,31 +62,19 @@ func updateEventsSummary(e *trace.Event) {
 }
 
 func HandleEventsSink(c *gin.Context) {
-	ByteBody, _ := ioutil.ReadAll(c.Request.Body)
-	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(ByteBody))
-
-	// jsonData, err := io.ReadAll(c.Request.Body)
-	// if err != nil {
-	// 	log.Error().Msgf("Failed to read request: %v", err)
-	// 	return
-	// }
-	// fmt.Printf(string(jsonData))
-
-	// var e models.MockEvent
 	var e trace.Event
 	if err := c.BindJSON(&e); err != nil {
 		log.Error().Msgf("Failed to decode json: %v", err)
 		return
 	}
-	log.Info().Msgf("Recevied %v", e.EventName)
-	eventJson, _ := json.Marshal(e)
-	log.Info().Msgf(string(eventJson))
+	// eventJson, _ := json.Marshal(e)
+	// log.Info().Msgf(string(eventJson))
 
 	if timestampLimit != nil {
 		eventTs := time.Unix(int64(e.Timestamp), 0)
 
 		if eventTs.After(*timestampLimit) {
-			log.Debug().Msgf("Dropping event with ts %v (ts limit: %v)", eventTs, timestampLimit)
+			// log.Debug().Msgf("Dropping event with ts %v (ts limit: %v)", eventTs, timestampLimit)
 			return
 		}
 	}
