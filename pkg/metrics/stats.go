@@ -93,23 +93,23 @@ func (stats *Stats) RegisterPrometheus(traceeConfig config.Config) error {
 		Help:      "errors accumulated by tracee-ebpf",
 	}, func() float64 { return float64(stats.ErrorCount.Get()) }))
 
-	// For some reason it returns maximum value even
-	// when the cache is empty
-	// err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-	// 	Namespace: "tracee_ebpf",
-	// 	Name:      "events_cached",
-	// 	Help:      "number of cached events",
-	// }, func() float64 {
-	// 	cache := traceeConfig.Cache
-	// 	cacheSize := -1.0
-	// 	if cache != nil {
-	// 		cacheSize = float64(cache.Size())
-	// 	}
-	// 	return cacheSize
-	// }))
-	// if err != nil {
-	// 	return errfmt.WrapError(err)
-	// }
+	err = prometheus.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Namespace: "tracee_ebpf",
+		Name:      "events_cached",
+		Help:      "number of cached events",
+	}, func() float64 {
+		cache := traceeConfig.Cache
+		cacheSize := -1.0
+		if cache != nil {
+			cacheSize = float64(cache.Size())
+		}
+
+		logger.Debugw("Fetching events cached", "events_cached", cacheSize)
+		return cacheSize
+	}))
+	if err != nil {
+		return errfmt.WrapError(err)
+	}
 
 	err = prometheus.Register(prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
