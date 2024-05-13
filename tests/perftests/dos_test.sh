@@ -201,6 +201,7 @@ run_workload() {
 	case "$TEST_TYPE" in
 	"pgbench") run_pgbench ;;
 	"dos") run_dos ;;
+	"sleep") sleep $TEST_DURATION ;;
 	*) echo invalid test type && exit 1 ;;
 	esac
 }
@@ -270,7 +271,7 @@ _main() {
 
 	set_webhook_ts_limit
 	stop_workloads
-	wait_tracee_sink
+	# wait_tracee_sink
 
 	fetch_events_stats
 	sleep $POST_TEST_SLEEP_SEC
