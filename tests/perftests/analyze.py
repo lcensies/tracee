@@ -96,13 +96,11 @@ x1, y1 = [div_x, div_x], [min_y, max_y]
 ax1.plot(x1, y1, marker="o")
 
 
-load_caption = "Load test finish"
-load_caption = "Load stop"
+# load_caption = "Load test finish"
+load_caption = "Load\nstop"
 scale = (max_y - min_y) * 0.05
 
 offset = 9
-
-ax1.text(div_x - offset, min_y + scale, load_caption, fontsize=10)
 
 
 min_y = min(cache_load)
@@ -112,17 +110,28 @@ scale = (max_y - min_y) * 0.05
 
 x1, y1 = [div_x, div_x], [0, 1]
 ax2.plot(x1, y1, marker="o")
-ax2.text(div_x - offset, min_y + scale, load_caption, fontsize=9)
 
-# ax2.annotate(
-#     load_caption,
-#     xy=(div_x, 0),
-#     fontsize=10,
-#     # xytext=(div_x + 1, 0),
-#     # arrowprops=dict(facecolor="red"),
-#     # color="g",
-# )
 
+def add_div_tick(ax, div_value, label):
+    def get_tick_idx(ticks, lim):
+        for i, x in enumerate(ticks):
+            if lim < x:
+                return i
+
+    ticks = ax.get_xticks()
+
+    labels = [item.get_text() for item in ax.get_xticklabels()]
+    tick_idx = get_tick_idx(ticks, float(div_value))
+
+    ticks = list(ticks[0:tick_idx]) + [div_x] + list(ticks[tick_idx:])
+    labels = labels[0:tick_idx] + [f"{round(div_x)}\n{label}"] + labels[tick_idx:]
+
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels)
+
+
+add_div_tick(ax1, div_x, load_caption)
+add_div_tick(ax2, div_x, load_caption)
 
 print_stats()
 
