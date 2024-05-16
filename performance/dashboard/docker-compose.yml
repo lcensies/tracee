@@ -58,6 +58,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -84,3 +86,7 @@ services:
   #   command:
   #     - "server"
   #   network_mode: "host"
+
+volumes:
+  grafana_data: 
+  prometheus_data:
