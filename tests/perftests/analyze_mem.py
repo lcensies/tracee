@@ -4,15 +4,8 @@ from os import environ
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.ticker import FormatStrFormatter, StrMethodFormatter
-
-import matplotlib.lines as lines
-import matplotlib.patches as patches
-import matplotlib.text as text
 
 load_dotenv()
-assert "TRACEE_MEMORY_STATS_FILE" in environ
-assert "TRACEE_CACHE_STATS_FILE" in environ
 
 
 def load_json(path: str):
@@ -59,9 +52,13 @@ def get_tracee_mem_stats() -> tuple[list[float], list[float]]:
 mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
 cache_load_timestamps, cache_load = get_tracee_cache_load()
 
-# plt.plot(mem_stats_timestamps, mem_stats_mb)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+
+ax1.set_xlim([0, mem_stats_timestamps[-1]])
+ax2.set_xlim([0, mem_stats_timestamps[-1]])
+ax2.set_ylim([0, 1])
 
 ax1.plot(mem_stats_timestamps, mem_stats_mb)
 
@@ -92,8 +89,8 @@ div_y_high = 1
 min_y = min(mem_stats_mb)
 max_y = max(mem_stats_mb)
 
-x1, y1 = [div_x, div_x], [min_y, max_y]
-ax1.plot(x1, y1, marker="o")
+# x1, y1 = [div_x, div_x], [min_y, max_y]
+# ax1.plot(x1, y1, marker="o")
 
 
 # load_caption = "Load test finish"
@@ -103,12 +100,8 @@ scale = (max_y - min_y) * 0.05
 offset = 9
 
 
-min_y = min(cache_load)
-max_y = max(cache_load)
-
 scale = (max_y - min_y) * 0.05
-
-x1, y1 = [div_x, div_x], [0, 1]
+x1, y1 = [div_x, div_x], [min(cache_load), max(cache_load)]
 ax2.plot(x1, y1, marker="o")
 
 
