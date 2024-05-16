@@ -108,7 +108,6 @@ run_dos() {
 
 	sleep $DOS_DURATION_SEC
 
-	docker kill dos 2>/dev/null || :
 }
 
 # TODO: switch to Makefile
@@ -153,12 +152,16 @@ run_benchmark() {
 fetch_events_stats() {
 	curl "$WEBHOOK_ADDR" | sudo tee "$EVENTS_STATS_FILE"
 	curl "$WEBHOOK_ADDR/fileevents" | sudo tee "$FILE_IO_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_lost" | jq ".data.result" | sudo tee "$EVENTS_LOST_STATS_FILE"
+	# curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"
+
 }
 
-fetch_mem_usage() {
+fetch_post_sleep_stats() {
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=process_resident_memory_bytes[120m]&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | jq ".data.result" | sudo tee "$TRACEE_CACHE_STATS_FILE"
+
+	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_total[120m]" | sudo tee "$EVENTS_RATE_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"
 }
 
 # TODO: refactor
@@ -190,8 +193,7 @@ _main() {
 
 	fetch_events_stats
 	sleep $POST_TEST_SLEEP_SEC
-	fetch_mem_usage
-
+	fetch_post_sleep_stats
 }
 
 _main
