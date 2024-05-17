@@ -25,8 +25,7 @@ VM_SCP_CMD="scp -i $VM_SSH_PRIVKEY -P $VM_PORT -o StrictHostKeyChecking=no -o Us
 # pass environmental variables that are starting from TRACEE or DOS prefix to remote host
 # for example, TRACEE_BENCHMARK_OUTPUT_FILE
 VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(env | sed 's/;/\;/g' | grep -E 'TRACEE|DOS')"
-
-OUTPUT_DIR=${OUTPUT_DIR:-~/repos/thesis_new/assets/pgbench}
+PERFTEST_REPORTS_DIR=${PERFTEST_REPORTS_DIR:-/tmp/tracee}
 
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 
@@ -52,8 +51,8 @@ run_test() {
 
 for i in $(seq 1 $N_RUNS); do
 	run_test
-	mkdir -p "$OUTPUT_DIR/$i"
-	cp -r /tmp/tracee "$OUTPUT_DIR/$i"
+	mkdir -p "$PERFTEST_REPORTS_DIR/$i"
+	cp -r /tmp/tracee "$PERFTEST_REPORTS_DIR/$i"
 done
 
 # TODO: create snapshot only if it doesn't exist
