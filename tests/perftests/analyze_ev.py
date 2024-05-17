@@ -12,6 +12,10 @@ load_dotenv()
 load_caption = "Load\nstop"
 
 
+EVENTS_RATE_STATS_FILENAME = "events_rate_metrics.json"
+LOST_EVENTS_STATS_FILENAME = "events_lost_metrics.json"
+
+
 def load_json(path: str):
     assert type(path) == str
     with open(path, "r") as f:
@@ -51,21 +55,23 @@ def reduce_series_by_ts(timestamps, values, interval=5):
     return ts_reduced, values_reduced
 
 
-def get_events():
-    path = environ.get("EVENTS_RATE_STATS_FILE", "/tmp/tracee/events_rate_metrics.json")
+def load_series(path: str):
     raw_stats = load_json(path)
     data = [x["values"] for x in raw_stats["data"]["result"]][0]
-
-    # ts_diff = data[0][0] - data[1][0]
-    # prev_ts = data[0][0] - ts_diff
-
     timestamps = get_relative_ts(data)
-    events = [int(x[1]) for x in data]
+    values = [int(x[1]) for x in data]
 
-    # timestamps = [prev_ts] + timestamps
-    # events = [0] + events
+    return timestamps, values
 
-    return timestamps, events
+
+def load_events():
+    path = f"{environ['PERFTEST_REPORTS_DIR']}/{EVENTS_RATE_STATS_FILENAME}"
+    return load_series(path)
+
+
+def load_lost_events():
+    path = f"{environ['PERFTEST_REPORTS_DIR']}/{LOST_EVENTS_STATS_FILENAME}"
+    return load_series(path)
 
 
 def add_div_tick(ax, div_value, label):
@@ -118,20 +124,11 @@ def get_load_stop_ts(timestamps, load_finish_sec=20):
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-
-# ax2.set_ylim([0, ])
-
-# ax1.plot(mem_stats_timestamps, mem_stats_mb)
-
-# ax1.set_title("Agent memory consumption")
 ax1.set_xlabel("Time (seconds)")
 ax1.set_ylabel("Events per-second increase rate")
 
-# ax2.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
-# ax2.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-# ax2.yaxis.set_major_formatter(StrMethodFormatter("{x:,.2f}"))
 ax2.set_xlabel("Time (seconds)")
-# ax2.set_ylabel("Cache load (rate)")
+ax2.set_ylabel("Lost events (rate)")
 
 
 # def print_stats():
@@ -140,55 +137,40 @@ ax2.set_xlabel("Time (seconds)")
 #     print(cache_load_timestamps)
 #     print(cache_load)
 
-events_ts, events = get_events()
+# events
+
+events_ts, events = load_events()
 events_ts, events = reduce_series_by_ts(events_ts, events)
 events_ts_int = np.linspace(events_ts[0], events_ts[-1], 60)
-
-# interpolate values
-# events_ts_int = np.linspace(events_ts[0], events_ts[-1])
-# events_int = np.interp(events_ts_int, events_ts, events)
-
-# spl = make_interp_spline(events_ts, events, k=3)  # type: BSpline
-# events_int = spl(events_ts_int)
-
-
-# ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts_int, events_int)
 
 
 ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
 
-
 spl = make_interp_spline(ev_rate_ts, ev_rate, k=3)  # type: BSpline
 ev_rate_int = spl(events_ts_int)
-
 
 events_ts_int, ev_rate_int = filter_gt_zero(events_ts_int, ev_rate_int)
 events_ts_int, ev_rate_int = filter_start_inc(events_ts_int, ev_rate_int)
 
-
 ax1.set_xlim([0, ev_rate_ts[-1]])
 ax2.set_xlim([0, ev_rate_ts[-1]])
 
-# print(ev_rate_int)
-# exit(-1)
-plt.plot(events_ts_int, ev_rate_int)
-# plt.plot(ev_rate_ts, ev_rate)
-# plt.plot(ev_rate_timetsamps, ev_rate)
-
-# 5 seconds sampled intervals, 20 seconds
-# sleep, so we take -4 index
-
-
-# div_x = ev_rate_timetsamps[-4]
-
 div_x = get_load_stop_ts(ev_rate_ts)
-
-# x1, y1 = [div_x, div_x], [min_y, max_y]
-# ax1.plot(x1, y1, marker="o")
-
-
 add_div_tick(ax1, div_x, load_caption)
 add_div_tick(ax2, div_x, load_caption)
+
+
+# lost events
+
+lost_events_ts, lost_events = load_lost_events()
+lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
+
+# spl = make_interp_spline(lost_events_ts, lost_events_rate, k=3)  # type: BSpline
+# lost_events_ts_int = np.linspace(lost_events_ts[0], lost_events_ts[-1], 60)
+# lost_events_rate_int = spl(lost_events_ts_int)
+
+ax1.plot(events_ts_int, ev_rate_int)
+ax2.plot(lost_events_ts, lost_events_rate)
 
 plt.savefig("events.png")
 
