@@ -157,7 +157,7 @@ fetch_events_stats() {
 
 fetch_post_sleep_stats() {
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=process_resident_memory_bytes[120m]&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | sudo tee "$TRACEE_CACHE_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | sudo tee "$CACHE_LOAD_STATS_FILE"
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_cached[120m]" | sudo tee "$EVENTS_CACHED_STATS_FILE"
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_total[120m]" | sudo tee "$EVENTS_RATE_STATS_FILE"
 	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"

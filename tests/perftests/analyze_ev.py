@@ -12,7 +12,8 @@ load_dotenv()
 # load_caption = "Load test finish"
 load_caption = "Load\nstop"
 
-PERFTEST_REPORTS_DIR = environ["PERFTEST_REPORTS_DIR"]
+# TODO: average
+PERFTEST_REPORTS_DIR = f"{environ['PERFTEST_REPORTS_DIR']}/1/tracee"
 REPORT_SUMMARY_FILE = f"{PERFTEST_REPORTS_DIR}/summary.json"
 
 # TODO: fetch them from env
@@ -96,7 +97,10 @@ def reduce_series_by_ts(timestamps, values, interval=5):
 
 def load_series(path: str):
     raw_stats = load_json(path)
+    if type(raw_stats) == list:
+        raw_stats = raw_stats[0]
     data = [x["values"] for x in raw_stats["data"]["result"]][0]
+
     timestamps = get_relative_ts(data)
     values = [float(x[1]) for x in data]
 
@@ -181,9 +185,6 @@ ax2.set_xlabel("Time (seconds)")
 ax2.set_ylabel("Lost events (rate)")
 
 
-# TODO: average
-
-
 # events
 
 events_ts, events = load_events()
@@ -212,19 +213,13 @@ add_div_tick(ax2, div_x, load_caption)
 lost_events_ts, lost_events = load_lost_events()
 lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
 
-
-# spl = make_interp_spline(lost_events_ts, lost_events_rate, k=3)  # type: BSpline
-# lost_events_ts_int = np.linspace(lost_events_ts[0], lost_events_ts[-1], 60)
-# lost_events_rate_int = spl(lost_events_ts_int)
-
 ax1.plot(events_ts_int, ev_rate_int)
 ax2.plot(lost_events_ts, lost_events_rate)
 
-plt.savefig("events.png")
 
-# plt.savefig("cache_load.png")
 plt.tight_layout()
-# plt.show()
+
+plt.savefig("events.png", bbox_inches="tight")
 
 
 plt.cla()
@@ -238,6 +233,7 @@ def interpolate(timestamps, values, n_points=60):
 
 
 mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
+mem_consumption_median = np.median(mem_stats_mb)
 mem_stats_timestamps, mem_stats_mb = interpolate(mem_stats_timestamps, mem_stats_mb, 60)
 cache_load_timestamps, cache_load = load_cache_load()
 
@@ -250,6 +246,7 @@ def update_stats():
     summary["events_captured"] = events[div_x_idx]
     summary["events_lost"] = lost_events[div_x_idx]
     summary["events_cached"] = events_cached[div_x_idx]
+    summary["mem_consumption_median"] = mem_consumption_median
     save_json(summary, REPORT_SUMMARY_FILE)
 
 
@@ -271,12 +268,11 @@ ax2.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
 ax2.set_xlabel("Time (seconds)")
 ax2.set_ylabel("Cache load (rate)")
 
-
 add_div_tick(ax1, div_x, load_caption)
 add_div_tick(ax2, div_x, load_caption)
 
 
-plt.savefig("mem_consumption.png")
+plt.savefig("mem_consumption.png", bbox_inches="tight")
 
 
 update_stats()
