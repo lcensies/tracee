@@ -1,19 +1,9 @@
 #!/bin/bash -x
 
-# 1. Build tracee
-# 2. Create snapshot
-# 3. Invoke DoS
-# 4. Gather metrics
-# 5. Revert snapshot
+SCRIPT_DIR="$(cd ${0%/*} && pwd -P)"
+source "$SCRIPT_DIR/.env"
 
-N_RUNS=1
-
-BUILD_TRACEE=false
-TRACEE_ROOT=$(git rev-parse --show-toplevel)
-
-# VAGRANT_CMD="cd $TRACEE_ROOT && vagrant "
-
-# TODO: discover forwarded port and auto choose it for SSH_CMD
+# TODO: auto discover forwarded port and auto choose it for SSH_CMD
 # default: 22 (guest) => 2222 (host) (adapter 1)
 VM_PORT=2222
 VM_SSH_PRIVKEY="$TRACEE_ROOT/.vagrant/machines/default/virtualbox/private_key"
@@ -25,10 +15,10 @@ VM_SCP_CMD="scp -i $VM_SSH_PRIVKEY -P $VM_PORT -o StrictHostKeyChecking=no -o Us
 # pass environmental variables that are starting from TRACEE or DOS prefix to remote host
 # for example, TRACEE_BENCHMARK_OUTPUT_FILE
 VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(env | sed 's/;/\;/g' | grep -E 'TRACEE|DOS')"
-PERFTEST_REPORTS_DIR=${PERFTEST_REPORTS_DIR:-/tmp/tracee}
 
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 
+# start mock server to receive events
 make run-mockserv
 # ensure tracee dir exists on host
 mkdir -p /tmp/tracee
@@ -49,13 +39,14 @@ run_test() {
 	$VM_SCP_CMD -r "$VM_SSH_ROOT:/tmp/tracee" /tmp
 }
 
-for i in $(seq 1 $N_RUNS); do
+# echo reports dir: $PERFTEST_REPORTS_DIR && exit 1
+
+for i in $(seq 1 $TEST_N_RUNS); do
 	run_test
 	mkdir -p "$PERFTEST_REPORTS_DIR/$i"
-	cp -r /tmp/tracee "$PERFTEST_REPORTS_DIR/$i"
+	cp -r /tmp/tracee/ "$PERFTEST_REPORTS_DIR/$i"
 done
 
 # TODO: create snapshot only if it doesn't exist
 # $VAGRANT_CMD snapshot save tracee_vm base
-# TODO: use CMD_VAGRANT
 # cd "$TRACEE_ROOT" && vagrant snapshot restore "$VM_NAME" base
