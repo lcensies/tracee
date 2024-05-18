@@ -5,25 +5,64 @@ from os import environ
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+from dataclasses import dataclass
 
 load_dotenv()
 
 # load_caption = "Load test finish"
 load_caption = "Load\nstop"
 
+PERFTEST_REPORTS_DIR = environ["PERFTEST_REPORTS_DIR"]
+REPORT_SUMMARY_FILE = f"{PERFTEST_REPORTS_DIR}/summary.json"
 
+# TODO: fetch them from env
+MEMORY_STATS_FILE = "agent_memory_metrics.json"
 EVENTS_RATE_STATS_FILENAME = "events_rate_metrics.json"
 LOST_EVENTS_STATS_FILENAME = "events_lost_metrics.json"
+CACHED_EVENTS_STATS_FILENAME = "events_cached_metrics.json"
+CACHE_LOAD_STATS_FILENAME = "cache_load_metrics.json"
+
+from pathlib import Path
 
 
 def load_json(path: str):
     assert type(path) == str
-    with open(path, "r") as f:
-        return json.load(f)
+
+    Path(REPORT_SUMMARY_FILE).touch(exist_ok=True)
+
+    with open(path, "r+") as f:
+        try:
+            obj = json.load(f)
+        except Exception:
+            obj = {}
+        return obj
+
+
+def save_json(obj, path: str):
+    with open(path, "w+") as f:
+        json.dump(obj, f)
 
 
 def get_relative_ts(data: list[list]) -> list[float]:
     return [float(x[0]) - float(data[0][0]) for x in data]
+
+
+def get_tracee_mem_stats() -> tuple[list[float], list[float]]:
+    mem_stats_path = environ.get("TRACEE_MEMORY_STATS_FILE", "")
+    raw_stats = load_json(mem_stats_path)
+    data = [
+        x["values"]
+        for x in raw_stats["data"]["result"]
+        if x["metric"]["job"] == "tracee"
+    ][0]
+
+    # print(data)
+    def bytes_to_mb(num: int) -> float:
+        return num / 1024 / 1024
+
+    timestamps = get_relative_ts(data)
+    mem_consumption_mb = [bytes_to_mb(int(x[1])) for x in data]
+    return (timestamps, mem_consumption_mb)
 
 
 def get_ev_inc_rate(timestamps, events) -> tuple[list[float], list[float]]:
@@ -59,18 +98,28 @@ def load_series(path: str):
     raw_stats = load_json(path)
     data = [x["values"] for x in raw_stats["data"]["result"]][0]
     timestamps = get_relative_ts(data)
-    values = [int(x[1]) for x in data]
+    values = [float(x[1]) for x in data]
 
     return timestamps, values
 
 
 def load_events():
-    path = f"{environ['PERFTEST_REPORTS_DIR']}/{EVENTS_RATE_STATS_FILENAME}"
+    path = f"{PERFTEST_REPORTS_DIR}/{EVENTS_RATE_STATS_FILENAME}"
     return load_series(path)
 
 
 def load_lost_events():
-    path = f"{environ['PERFTEST_REPORTS_DIR']}/{LOST_EVENTS_STATS_FILENAME}"
+    path = f"{PERFTEST_REPORTS_DIR}/{LOST_EVENTS_STATS_FILENAME}"
+    return load_series(path)
+
+
+def load_cache_load():
+    path = f"{PERFTEST_REPORTS_DIR}/{CACHE_LOAD_STATS_FILENAME}"
+    return load_series(path)
+
+
+def load_cached_events():
+    path = f"{PERFTEST_REPORTS_DIR}/{CACHED_EVENTS_STATS_FILENAME}"
     return load_series(path)
 
 
@@ -115,9 +164,10 @@ def filter_start_inc(timestamps, values):
 
 def get_load_stop_ts(timestamps, load_finish_sec=20):
     ts_limit = timestamps[-1] - load_finish_sec
-    for ts in timestamps:
+    for i, ts in enumerate(timestamps):
         if ts >= ts_limit:
-            return ts
+            return i, ts
+    return len(timestamps) - 1, timestamps[-1]
 
 
 # plt.plot(mem_stats_timestamps, mem_stats_mb)
@@ -131,11 +181,8 @@ ax2.set_xlabel("Time (seconds)")
 ax2.set_ylabel("Lost events (rate)")
 
 
-# def print_stats():
-#     mem_median = np.median(np.array(mem_stats_mb[0:-4]))
-#     print(f"Median memory consumption: {mem_median}")
-#     print(cache_load_timestamps)
-#     print(cache_load)
+# TODO: average
+
 
 # events
 
@@ -155,7 +202,7 @@ events_ts_int, ev_rate_int = filter_start_inc(events_ts_int, ev_rate_int)
 ax1.set_xlim([0, ev_rate_ts[-1]])
 ax2.set_xlim([0, ev_rate_ts[-1]])
 
-div_x = get_load_stop_ts(ev_rate_ts)
+div_x_idx, div_x = get_load_stop_ts(ev_rate_ts)
 add_div_tick(ax1, div_x, load_caption)
 add_div_tick(ax2, div_x, load_caption)
 
@@ -164,6 +211,7 @@ add_div_tick(ax2, div_x, load_caption)
 
 lost_events_ts, lost_events = load_lost_events()
 lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
+
 
 # spl = make_interp_spline(lost_events_ts, lost_events_rate, k=3)  # type: BSpline
 # lost_events_ts_int = np.linspace(lost_events_ts[0], lost_events_ts[-1], 60)
@@ -176,7 +224,62 @@ plt.savefig("events.png")
 
 # plt.savefig("cache_load.png")
 plt.tight_layout()
-plt.show()
+# plt.show()
+
+
+plt.cla()
+
+
+def interpolate(timestamps, values, n_points=60):
+    spl = make_interp_spline(timestamps, values, k=3)  # type: BSpline
+    ts_int = np.linspace(timestamps[0], timestamps[-1], n_points)
+    values_int = spl(ts_int)
+    return ts_int, values_int
+
+
+mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
+mem_stats_timestamps, mem_stats_mb = interpolate(mem_stats_timestamps, mem_stats_mb, 60)
+cache_load_timestamps, cache_load = load_cache_load()
+
+
+events_cached_ts, events_cached = load_cached_events()
+
+
+def update_stats():
+    summary = load_json(REPORT_SUMMARY_FILE)
+    summary["events_captured"] = events[div_x_idx]
+    summary["events_lost"] = lost_events[div_x_idx]
+    summary["events_cached"] = events_cached[div_x_idx]
+    save_json(summary, REPORT_SUMMARY_FILE)
+
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+
+ax1.set_xlim([0, mem_stats_timestamps[-1]])
+ax2.set_xlim([0, mem_stats_timestamps[-1]])
+ax2.set_ylim([0, 1])
+
+ax1.plot(mem_stats_timestamps, mem_stats_mb)
+
+ax1.set_xlabel("Time (seconds)")
+ax1.set_ylabel("Agent memory consumption (MB)")
+
+ax2.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
+# ax2.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+# ax2.yaxis.set_major_formatter(StrMethodFormatter("{x:,.2f}"))
+ax2.set_xlabel("Time (seconds)")
+ax2.set_ylabel("Cache load (rate)")
+
+
+add_div_tick(ax1, div_x, load_caption)
+add_div_tick(ax2, div_x, load_caption)
+
+
+plt.savefig("mem_consumption.png")
+
+
+update_stats()
 
 
 # TODO: compare with perfplot
