@@ -96,26 +96,26 @@ def reduce_series_by_ts(timestamps, values, interval=5):
     return ts_reduced, values_reduced
 
 
-def load_series(path: str):
+def load_series(path: str, value_type=float):
     raw_stats = load_json(path)
     if type(raw_stats) == list:
         raw_stats = raw_stats[0]
     data = [x["values"] for x in raw_stats["data"]["result"]][0]
 
     timestamps = get_relative_ts(data)
-    values = [float(x[1]) for x in data]
+    values = [value_type(x[1]) for x in data]
 
     return timestamps, values
 
 
 def load_events():
     path = f"{PERFTEST_REPORTS_DIR}/{EVENTS_RATE_STATS_FILENAME}"
-    return load_series(path)
+    return load_series(path, int)
 
 
 def load_lost_events():
     path = f"{PERFTEST_REPORTS_DIR}/{LOST_EVENTS_STATS_FILENAME}"
-    return load_series(path)
+    return load_series(path, int)
 
 
 def load_cache_load():
@@ -125,7 +125,7 @@ def load_cache_load():
 
 def load_cached_events():
     path = f"{PERFTEST_REPORTS_DIR}/{CACHED_EVENTS_STATS_FILENAME}"
-    return load_series(path)
+    return load_series(path, int)
 
 
 def add_div_tick(ax, div_value, label):
@@ -245,13 +245,13 @@ cache_load_timestamps, cache_load = load_cache_load()
 events_cached_ts, events_cached = load_cached_events()
 
 
-def update_stats():
-    summary = load_json(REPORT_SUMMARY_FILE)
-    summary["events_captured"] = events[div_x_idx]
+def update_summary() -> dict:
+    summary = {}
+    summary["events_captured"] = events[div_x_idx] + events_cached[div_x_idx]
     summary["events_lost"] = lost_events[div_x_idx]
-    summary["events_cached"] = events_cached[div_x_idx]
-    summary["mem_consumption_median"] = mem_consumption_median
+    summary["memory_consumption_median_mb"] = mem_consumption_median
     save_json(summary, REPORT_SUMMARY_FILE)
+    return summary
 
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -280,7 +280,7 @@ MEM_PLOT_PNG = "mem_consumption.png"
 plt.savefig(MEM_PLOT_PNG, bbox_inches="tight")
 shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
 
-update_stats()
+summary = update_summary()
 
 
 # TODO: compare with perfplot
