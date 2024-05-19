@@ -50,3 +50,5 @@ done
 # TODO: create snapshot only if it doesn't exist
 # $VAGRANT_CMD snapshot save tracee_vm base
 # cd "$TRACEE_ROOT" && vagrant snapshot restore "$VM_NAME" base
+
+python3 "${SCRIPT_DIR}/analyze_ev.py"
