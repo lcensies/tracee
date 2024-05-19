@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import json
 from scipy.interpolate import make_interp_spline, BSpline
+import shutil
 from os import environ
 import numpy as np
 import matplotlib.pyplot as plt
@@ -219,8 +220,11 @@ ax2.plot(lost_events_ts, lost_events_rate)
 
 plt.tight_layout()
 
-plt.savefig("events.png", bbox_inches="tight")
-
+EVENTS_PLOT_FILENAME = "events.png"
+plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
+shutil.copy(
+    Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
+)
 
 plt.cla()
 
@@ -272,8 +276,9 @@ add_div_tick(ax1, div_x, load_caption)
 add_div_tick(ax2, div_x, load_caption)
 
 
-plt.savefig("mem_consumption.png", bbox_inches="tight")
-
+MEM_PLOT_PNG = "mem_consumption.png"
+plt.savefig(MEM_PLOT_PNG, bbox_inches="tight")
+shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
 
 update_stats()
 
