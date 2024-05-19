@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from dataclasses import dataclass
+import pandas as pd
 
 load_dotenv()
 
@@ -283,5 +284,21 @@ shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
 summary = update_summary()
 
 
+print(summary)
+
+
+def print_summary_latex(summary):
+    df_summary = {k: [v] for k, v in summary.items()}
+    df = pd.DataFrame.from_dict(df_summary)
+    print(
+        df.to_latex(
+            index=False,
+            formatters={"name": str.upper},
+            float_format="{:.1f}".format,
+        )
+    )
+
+
+print_summary_latex(summary)
 # TODO: compare with perfplot
 # https://pypi.org/project/perfplot/
