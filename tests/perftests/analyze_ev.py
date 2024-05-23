@@ -15,10 +15,12 @@ load_dotenv()
 load_caption = "Load\nstop"
 
 # TODO: average
+# PERFTEST_REPORTS_DIR = "/home/f32/repos/thesis_new/assets/experiments/1-2-base-longrun"
 PERFTEST_REPORTS_DIR = f"{environ['PERFTEST_REPORTS_DIR']}/1/tracee"
+print(PERFTEST_REPORTS_DIR)
 REPORT_SUMMARY_FILE = f"{PERFTEST_REPORTS_DIR}/summary.json"
 
-# TODO: fetch them from env
+# TODO: change to single file
 MEMORY_STATS_FILE = "agent_memory_metrics.json"
 EVENTS_RATE_STATS_FILENAME = "events_rate_metrics.json"
 LOST_EVENTS_STATS_FILENAME = "events_lost_metrics.json"
@@ -46,12 +48,25 @@ def save_json(obj, path: str):
         json.dump(obj, f)
 
 
+def get_test_ticks():
+    start_time_path = f"{PERFTEST_REPORTS_DIR}/test_start_time.json"
+    end_time_path = f"{PERFTEST_REPORTS_DIR}/test_end_time.json"
+
+    start_time = datetime.strptime(
+        load_json(start_time_path)["start_time"], "%Y-%m-%dT%H:%M:%S"
+    )
+    end_time = datetime.strptime(
+        load_json(end_time_path)["end_time"], "%Y-%m-%dT%H:%M:%S"
+    )
+    return start_time, end_time
+
+
 def get_relative_ts(data: list[list]) -> list[float]:
     return [float(x[0]) - float(data[0][0]) for x in data]
 
 
 def get_tracee_mem_stats() -> tuple[list[float], list[float]]:
-    mem_stats_path = environ.get("TRACEE_MEMORY_STATS_FILE", "")
+    mem_stats_path = f"{PERFTEST_REPORTS_DIR}/{MEMORY_STATS_FILE}"
     raw_stats = load_json(mem_stats_path)
     data = [
         x["values"]
@@ -109,6 +124,7 @@ def load_series(path: str, value_type=float):
     return timestamps, values
 
 
+# TODO: change to single file
 def load_events():
     path = f"{PERFTEST_REPORTS_DIR}/{EVENTS_RATE_STATS_FILENAME}"
     return load_series(path, int)
@@ -171,63 +187,11 @@ def filter_start_inc(timestamps, values):
 def get_load_stop_ts(timestamps, load_finish_sec=20):
     ts_limit = timestamps[-1] - load_finish_sec
     for i, ts in enumerate(timestamps):
+        # if ts is None:
+        #     continue
         if ts >= ts_limit:
             return i, ts
     return len(timestamps) - 1, timestamps[-1]
-
-
-# plt.plot(mem_stats_timestamps, mem_stats_mb)
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-ax1.set_xlabel("Time (seconds)")
-ax1.set_ylabel("Events per-second increase rate")
-
-ax2.set_xlabel("Time (seconds)")
-ax2.set_ylabel("Lost events (rate)")
-
-
-# events
-
-events_ts, events = load_events()
-events_ts, events = reduce_series_by_ts(events_ts, events)
-events_ts_int = np.linspace(events_ts[0], events_ts[-1], 60)
-
-
-ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
-
-spl = make_interp_spline(ev_rate_ts, ev_rate, k=3)  # type: BSpline
-ev_rate_int = spl(events_ts_int)
-
-events_ts_int, ev_rate_int = filter_gt_zero(events_ts_int, ev_rate_int)
-events_ts_int, ev_rate_int = filter_start_inc(events_ts_int, ev_rate_int)
-
-ax1.set_xlim([0, ev_rate_ts[-1]])
-ax2.set_xlim([0, ev_rate_ts[-1]])
-
-div_x_idx, div_x = get_load_stop_ts(ev_rate_ts)
-add_div_tick(ax1, div_x, load_caption)
-add_div_tick(ax2, div_x, load_caption)
-
-
-# lost events
-
-lost_events_ts, lost_events = load_lost_events()
-lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
-
-ax1.plot(events_ts_int, ev_rate_int)
-ax2.plot(lost_events_ts, lost_events_rate)
-
-
-plt.tight_layout()
-
-EVENTS_PLOT_FILENAME = "events.png"
-plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
-shutil.copy(
-    Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
-)
-
-plt.cla()
 
 
 def interpolate(timestamps, values, n_points=60):
@@ -235,15 +199,6 @@ def interpolate(timestamps, values, n_points=60):
     ts_int = np.linspace(timestamps[0], timestamps[-1], n_points)
     values_int = spl(ts_int)
     return ts_int, values_int
-
-
-mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
-mem_consumption_median = np.median(mem_stats_mb)
-mem_stats_timestamps, mem_stats_mb = interpolate(mem_stats_timestamps, mem_stats_mb, 60)
-cache_load_timestamps, cache_load = load_cache_load()
-
-
-events_cached_ts, events_cached = load_cached_events()
 
 
 def update_summary() -> dict:
@@ -255,50 +210,122 @@ def update_summary() -> dict:
     return summary
 
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+# plt.plot(mem_stats_timestamps, mem_stats_mb)
+
+# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+# start_time, end_time = get_test_ticks()
 
 
-ax1.set_xlim([0, mem_stats_timestamps[-1]])
-ax2.set_xlim([0, mem_stats_timestamps[-1]])
-ax2.set_ylim([0, 1])
-
-ax1.plot(mem_stats_timestamps, mem_stats_mb)
+fig, subplots = plt.subplots(2, 2, figsize=(10, 5))
+((ax1, ax2), (ax3, ax4)) = subplots
 
 ax1.set_xlabel("Time (seconds)")
-ax1.set_ylabel("Agent memory consumption (MB)")
+ax1.set_ylabel("Events (rate)")
 
-ax2.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
-# ax2.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-# ax2.yaxis.set_major_formatter(StrMethodFormatter("{x:,.2f}"))
 ax2.set_xlabel("Time (seconds)")
-ax2.set_ylabel("Cache load (rate)")
+ax2.set_ylabel("Lost events (increase rate)")
 
+
+# events
+
+events_ts, events = load_events()
+events_ts, events = reduce_series_by_ts(events_ts, events)
+events_ts_int = np.linspace(events_ts[0], events_ts[-1], 60)
+
+
+ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
+
+# plt.setp(subplots, xlim=[0, ev_rate_ts[-1]])
+
+
+spl = make_interp_spline(ev_rate_ts, ev_rate, k=3)  # type: BSpline
+ev_rate_int = spl(events_ts_int)
+
+events_ts_int, ev_rate_int = filter_gt_zero(events_ts_int, ev_rate_int)
+# events_ts_int, ev_rate_int = filter_start_inc(events_ts_int, ev_rate_int)
+
+
+ax1.set_xlim([0, ev_rate_ts[-1]])
+ax2.set_xlim([0, ev_rate_ts[-1]])
+ax3.set_xlim([0, ev_rate_ts[-1]])
+ax4.set_xlim([0, ev_rate_ts[-1]])
+ax4.set_ylim([0, 1.01])
+
+
+# lost events
+
+lost_events_ts, lost_events = load_lost_events()
+lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
+
+ax1.plot(events_ts_int, ev_rate_int)
+ax2.plot(lost_events_ts, lost_events_rate)
+
+div_x_idx, div_x = get_load_stop_ts(ev_rate_ts)
 add_div_tick(ax1, div_x, load_caption)
 add_div_tick(ax2, div_x, load_caption)
 
 
-MEM_PLOT_PNG = "mem_consumption.png"
-plt.savefig(MEM_PLOT_PNG, bbox_inches="tight")
-shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
+plt.tight_layout()
+
+# EVENTS_PLOT_FILENAME = "events.png"
+# plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
+# shutil.copy(
+#     Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
+# )
+
+# plt.cla()
+
+
+mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
+mem_consumption_median = np.median(mem_stats_mb)
+mem_stats_timestamps, mem_stats_mb = interpolate(mem_stats_timestamps, mem_stats_mb, 60)
+cache_load_timestamps, cache_load = load_cache_load()
+
+
+events_cached_ts, events_cached = load_cached_events()
+
+
+def align_series(ref_timestamps, timestamps, values):
+    return timestamps[: len(ref_timestamps)], values[: len(timestamps)]
+
+
+print(f"Mem timestamps: {mem_stats_timestamps}")
+print(f"Ev timestamps: {ev_rate_ts}")
+
+print(f"Lat mem: {mem_stats_timestamps[-1]}")
+print(f"Last ev: {ev_rate_ts[-1]}")
+
+# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+# fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 5))
+
+
+ax3.plot(mem_stats_timestamps, mem_stats_mb)
+
+ax3.set_xlabel("Time (seconds)")
+ax3.set_ylabel("Agent memory consumption (MB)")
+
+ax4.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
+# ax4.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+# ax4.yaxis.set_major_formatter(StrMethodFormatter("{x:,.2f}"))
+ax4.set_xlabel("Time (seconds)")
+ax4.set_ylabel("Cache load (rate)")
+
+add_div_tick(ax3, div_x, load_caption)
+add_div_tick(ax4, div_x, load_caption)
+
+
+EVENTS_PLOT_FILENAME = "events.png"
+plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
+shutil.copy(
+    Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
+)
+
+# MEM_PLOT_PNG = "mem_consumption.png"
+# plt.savefig(MEM_PLOT_PNG, bbox_inches="tight")
+# shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
 
 summary = update_summary()
 
 
 print(summary)
-
-
-def print_summary_latex(summary):
-    df_summary = {k: [v] for k, v in summary.items()}
-    df = pd.DataFrame.from_dict(df_summary)
-    print(
-        df.to_latex(
-            index=False,
-            formatters={"name": str.upper},
-            float_format="{:.1f}".format,
-        )
-    )
-
-
-print_summary_latex(summary)
-# TODO: compare with perfplot
-# https://pypi.org/project/perfplot/

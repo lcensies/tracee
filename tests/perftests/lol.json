@@ -1,0 +1,1 @@
+echo "{\"timestamp\": \"$(date +%FT%T)\"}" > my.json

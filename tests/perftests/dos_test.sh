@@ -106,17 +106,28 @@ run_dos() {
 		-e DOS_SLEEP_DURATION_SEC="$DOS_SLEEP_DURATION_SEC" dos
 
 	sleep $DOS_DURATION_SEC
-
 }
 
 # TODO: switch to Makefile
 run_workload() {
+	start_time=$(date +%s)
+	# start_time=$(date +%FT%T)
+	echo "{\"start_time\": \"$start_time\"}" | sudo tee /tmp/tracee/start_time.json
+
 	case "$TEST_TYPE" in
 	"pgbench") run_pgbench ;;
 	"dos") run_dos ;;
 	"sleep") sleep $TEST_DURATION ;;
 	*) echo invalid test type && exit 1 ;;
 	esac
+
+	end_time=$(date +%s)
+	diff_seconds="$(($end_time - $start_time))"
+	echo "Test duration: $diff_seconds sec"
+
+	# end_time=$(date +%FT%T)
+	echo "{\"end_time\": \"$end_time\"}" | sudo tee /tmp/tracee/end_time.json
+
 }
 
 # Wait until all events from cache are consumed
@@ -124,7 +135,7 @@ wait_tracee_sink() {
 	cache_load=1
 
 	while [ "$cache_load" != "0" ]; do
-		cache_load="$(curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load" | jq ".data.result" | jq -c " .[].value | .[1]")"
+		cache_load="$(curl -g "$PROMETHEUS_ADDR/api/v1/query_range?start=query=tracee_ebpf_cache_load" | jq ".data.result" | jq -c " .[].value | .[1]")"
 		# cache_load="$(${TRACEE_BENCH_CMD} 2>/dev/null | jq .cacheLoad)"
 		echo "cache load: $cache_load"
 		sleep 1
@@ -156,11 +167,11 @@ fetch_events_stats() {
 }
 
 fetch_post_sleep_stats() {
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=process_resident_memory_bytes[120m]&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_cache_load[120m]" | sudo tee "$CACHE_LOAD_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_cached[120m]" | sudo tee "$EVENTS_CACHED_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_events_total[120m]" | sudo tee "$EVENTS_RATE_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=process_resident_memory_bytes&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_cache_load" | sudo tee "$CACHE_LOAD_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_events_cached" | sudo tee "$EVENTS_CACHED_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_events_total" | sudo tee "$EVENTS_RATE_STATS_FILE"
+	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_lostevents_total" | sudo tee "$EVENTS_LOST_STATS_FILE"
 }
 
 # TODO: refactor
@@ -184,6 +195,7 @@ _main() {
 
 	run_prometheus
 	run_tracee
+
 	run_workload
 
 	set_webhook_ts_limit
