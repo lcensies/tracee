@@ -72,13 +72,6 @@ run_tracee() {
 
 	echo TRACEE_CMD is "$TRACEE_CMD"
 
-	# docker run --name tracee -d --rm --pid=host --cgroupns=host --privileged -e TRACEE_EXE=$TRACEE_EXE -v /run/docker.sock:/var/run/docker.sock \
-	# 	-v /var/run:/var/run:ro -v /tmp/tracee:/tmp/tracee -v /boot:/boot -v $(pwd)/tracee:/etc/tracee -v /etc/os-release:/etc/os-release-host:ro -e "${TRACEE_EVENTS}" \
-	# 	-p 3366:3366 tracee:latest --healthz=true --metrics --output json --output out-file:${TRACEE_LOG_FILE} "${tracee_cache_params[@]}" \
-	# 	--perf-buffer-size="${TRACEE_PERF_BUFFER_SIZE}"
-
-	# -o option:sort-events # --proctree source=events
-
 	echo Waiting for tracee to start
 	while
 		! (curl -s "$TRACEE_LISTEN_ADDR/healthz" | grep -q "OK")
@@ -167,11 +160,12 @@ fetch_events_stats() {
 }
 
 fetch_post_sleep_stats() {
-	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=process_resident_memory_bytes&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_cache_load" | sudo tee "$CACHE_LOAD_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_events_cached" | sudo tee "$EVENTS_CACHED_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_events_total" | sudo tee "$EVENTS_RATE_STATS_FILE"
-	curl -g "$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time&query=tracee_ebpf_lostevents_total" | sudo tee "$EVENTS_LOST_STATS_FILE"
+	PROM_RANGE_QUERY_URL="$PROMETHEUS_ADDR/api/v1/query_range?step=1s&start=$start_time&end=$end_time"
+	curl -g "$PROM_RANGE_QUERY_URL&query=process_resident_memory_bytes&job=tracee" | sudo tee "$TRACEE_MEMORY_STATS_FILE"
+	curl -g "$PROM_RANGE_QUERY_URL&query=tracee_ebpf_cache_load" | sudo tee "$CACHE_LOAD_STATS_FILE"
+	curl -g "$PROM_RANGE_QUERY_URL&query=tracee_ebpf_events_cached" | sudo tee "$EVENTS_CACHED_STATS_FILE"
+	curl -g "$PROM_RANGE_QUERY_URL&query=tracee_ebpf_events_total" | sudo tee "$EVENTS_RATE_STATS_FILE"
+	curl -g "$PROM_RANGE_QUERY_URL&query=tracee_ebpf_lostevents_total" | sudo tee "$EVENTS_LOST_STATS_FILE"
 }
 
 # TODO: refactor
