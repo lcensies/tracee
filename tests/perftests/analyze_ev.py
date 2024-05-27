@@ -154,8 +154,6 @@ def get_relative_ts(data: list[list]) -> list[float]:
 def load_tracee_mem_stats(
     mem_stats_path=f"{PERFTEST_REPORTS_DIR}/{MEMORY_STATS_FILE}",
 ) -> tuple[list[float], list[float], int]:
-    print(f"mem path: {mem_stats_path}")
-
     raw_stats = load_json(mem_stats_path)
     data = [
         x["values"]
@@ -163,7 +161,6 @@ def load_tracee_mem_stats(
         if x["metric"]["job"] == "tracee"
     ][0]
 
-    # print(data)
     def bytes_to_mb(num: int) -> float:
         return num / 1024 / 1024
 
@@ -326,7 +323,6 @@ def load_lost_events_rate(path) -> tuple[list, list, int]:
 
 def show_all():
     global div_x_idx
-    print(f"show_all")
     fig, subplots = plt.subplots(2, 2, figsize=(10, 5))
     ((ax1, ax2), (ax3, ax4)) = subplots
 
@@ -366,14 +362,7 @@ def show_all():
 
     plt.tight_layout()
 
-    # EVENTS_PLOT_FILENAME = "events.png"
-    # plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
-    # shutil.copy(
-    #     Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
-    # )
-
-    # plt.cla()
-
+    # Memory
     mem_stats_timestamps, mem_stats_mb = load_tracee_mem_stats()
     mem_consumption_median = np.median(mem_stats_mb)
     mem_stats_timestamps, mem_stats_mb = interpolate(
@@ -382,12 +371,6 @@ def show_all():
     cache_load_timestamps, cache_load = load_cache_load()
 
     events_cached_ts, events_cached = load_cached_events()
-
-    print(f"Mem timestamps: {mem_stats_timestamps}")
-    print(f"Ev timestamps: {ev_rate_ts}")
-
-    print(f"Lat mem: {mem_stats_timestamps[-1]}")
-    print(f"Last ev: {ev_rate_ts[-1]}")
 
     # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     # fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 5))
@@ -512,9 +495,6 @@ def compare_results(first: BenchmarkResult, second: BenchmarkResult):
     )
 
     y_div = int(min(np.max(first.mem_consumption), np.max(second.mem_consumption)))
-    print(first.mem_consumption)
-    print(second.mem_consumption)
-    print(f"Minimum memory: {y_div}")
     add_div_tick(ax3, y_div, str(y_div), "y")
 
     ax3.plot(
@@ -568,40 +548,23 @@ def show_cache():
     save_plot("cache.png")
 
 
-# def show_cache_comparison():
-#     cache_load_timestamps, cache_load = load_series(
-#         f"{environ['EXPERIMENTS_DIR']}/1-2-base-longrun/cache_load_metrics.json"
-#     )
-#
-#     cache_no_webhook_ts, cache_no_webhook_load = load_series(
-#         f"{environ['EXPERIMENTS_DIR']}/2-2-webhook-removed/cache_load_metrics.json"
-#     )
-#
-#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-#
-#     # print(type(ax1))
-#     ax1.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
-#     ax2.plot(cache_no_webhook_ts, [round(float(x), 2) for x in cache_no_webhook_load])
-#     # ax = plt.gca()
-#
-#     ax1.set_xlabel("Time (seconds)")
-#     ax1.set_ylabel("Cache load (rate)")
-#     save_plot("cache.png")
-#     plt.show()
+# TODO: parametrize
 
 
-# def load_cache_load():
-#     path = f"{PERFTEST_REPORTS_DIR}/{CACHE_LOAD_STATS_FILENAME}"
-#     return load_series(path)
-
-# show_all()
-
-# show_cache()
-# show_cache_comparison()
+def cmp_pgbench_default():
+    first = BenchmarkResult("baseline", f"{environ['EXPERIMENTS_DIR']}/1-4-base-60s")
+    second = BenchmarkResult(
+        "merging", f"{environ['EXPERIMENTS_DIR']}/3-2-merging-no-sleep"
+    )
+    compare_results(first, second)
 
 
-first = BenchmarkResult("baseline", f"{environ['EXPERIMENTS_DIR']}/1-4-base-60s")
-second = BenchmarkResult(
-    "merging", f"{environ['EXPERIMENTS_DIR']}/3-2-merging-no-sleep"
-)
-compare_results(first, second)
+def cmp_pgbench_gen():
+    first = BenchmarkResult("baseline", f"{environ['EXPERIMENTS_DIR']}/1-4-base-60s")
+    second = BenchmarkResult(
+        "merging", f"{environ['EXPERIMENTS_DIR']}/3-2-merging-no-sleep"
+    )
+    compare_results(first, second)
+
+
+cmp_pgbench_default()
