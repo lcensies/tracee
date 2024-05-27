@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 from dataclasses import dataclass
 import pandas as pd
+from dataclasses import field
+from pathlib import Path
+from datetime import datetime
 
 # import perfplot
 
@@ -23,6 +26,7 @@ PERFTEST_REPORTS_DIR = f"{environ['PERFTEST_REPORTS_DIR']}/1/tracee"
 print(PERFTEST_REPORTS_DIR)
 REPORT_SUMMARY_FILE = f"{PERFTEST_REPORTS_DIR}/summary.json"
 
+
 # TODO: change to single file
 MEMORY_STATS_FILE = "agent_memory_metrics.json"
 EVENTS_RATE_STATS_FILENAME = "events_rate_metrics.json"
@@ -30,7 +34,86 @@ LOST_EVENTS_STATS_FILENAME = "events_lost_metrics.json"
 CACHED_EVENTS_STATS_FILENAME = "events_cached_metrics.json"
 CACHE_LOAD_STATS_FILENAME = "cache_load_metrics.json"
 
-from pathlib import Path
+
+def get_events_file(output_dir) -> str:
+    return f"{output_dir}/{EVENTS_RATE_STATS_FILENAME}"
+
+
+def get_lost_events_file(output_dir) -> str:
+    return f"{output_dir}/{LOST_EVENTS_STATS_FILENAME}"
+
+
+def get_cached_events_file(output_dir) -> str:
+    return f"{output_dir}/{CACHED_EVENTS_STATS_FILENAME}"
+
+
+def get_memory_stats_file(output_dir) -> str:
+    return f"{output_dir}/{MEMORY_STATS_FILE}"
+
+
+def get_cache_load_file(output_dir) -> str:
+    return f"{output_dir}/{CACHE_LOAD_STATS_FILENAME}"
+
+
+def json_to_csv(file):
+    with open(file, encoding="utf-8") as inputfile:
+        df = pd.read_json(inputfile)
+
+    csv_filename = file.replace("json", "csv")
+    df.to_csv(csv_filename, encoding="utf-8", index=False)
+
+
+@dataclass
+class BenchmarkResult:
+    label: str
+    output_dir: str
+
+    events_captured: int = -1
+    mem_consumption_median: int = -1
+    events_lost: int = -1
+    events_cached: int = -1
+
+    # TODO: change to numpy arr
+    events_rate: list = field(default_factory=list)
+    events_rate_ts: list = field(default_factory=list)
+
+    lost_events_rate: list = field(default_factory=list)
+    lost_events_rate_ts: list = field(default_factory=list)
+
+    cache_load: list = field(default_factory=list)
+    cache_load_ts: list = field(default_factory=list)
+
+    mem_consumption: list = field(default_factory=list)
+    mem_consumption_ts: list = field(default_factory=list)
+
+    def __post_init__(self):
+        self.output_dir = self.output_dir + "/tracee"
+
+        ev_rate_file = get_events_file(self.output_dir)
+        self.events_rate, self.events_rate_ts, self.events_captured = load_events_rate(
+            ev_rate_file
+        )
+
+        lost_events_file = get_lost_events_file(self.output_dir)
+        (
+            self.lost_events_rate_ts,
+            self.lost_events_rate,
+            self.events_lost,
+        ) = load_lost_events_rate(lost_events_file)
+
+        cache_load_file = get_cache_load_file(self.output_dir)
+        self.cache_load_ts, self.cache_load = load_cache_load(cache_load_file)
+
+        cache_load_file = get_cached_events_file(self.output_dir)
+        events_cached_ts, events_cached = load_cached_events(cache_load_file)
+        self.events_cached = int(events_cached[div_x_idx])
+
+        mem_consumption_file = get_memory_stats_file(self.output_dir)
+        (
+            self.mem_consumption_ts,
+            self.mem_consumption,
+            self.mem_consumption_median,
+        ) = load_tracee_mem_stats(mem_consumption_file)
 
 
 def load_json(path: str):
@@ -68,8 +151,11 @@ def get_relative_ts(data: list[list]) -> list[float]:
     return [float(x[0]) - float(data[0][0]) for x in data]
 
 
-def get_tracee_mem_stats() -> tuple[list[float], list[float]]:
-    mem_stats_path = f"{PERFTEST_REPORTS_DIR}/{MEMORY_STATS_FILE}"
+def load_tracee_mem_stats(
+    mem_stats_path=f"{PERFTEST_REPORTS_DIR}/{MEMORY_STATS_FILE}",
+) -> tuple[list[float], list[float], int]:
+    print(f"mem path: {mem_stats_path}")
+
     raw_stats = load_json(mem_stats_path)
     data = [
         x["values"]
@@ -83,7 +169,8 @@ def get_tracee_mem_stats() -> tuple[list[float], list[float]]:
 
     timestamps = get_relative_ts(data)
     mem_consumption_mb = [bytes_to_mb(int(x[1])) for x in data]
-    return (timestamps, mem_consumption_mb)
+    mem_consumption_median = np.median(mem_consumption_mb)
+    return (timestamps, mem_consumption_mb, int(mem_consumption_median))
 
 
 def get_ev_inc_rate(timestamps, events) -> tuple[list[float], list[float]]:
@@ -128,41 +215,48 @@ def load_series(path: str, value_type=float):
 
 
 # TODO: change to single file
-def load_events():
-    path = f"{PERFTEST_REPORTS_DIR}/{EVENTS_RATE_STATS_FILENAME}"
+def load_events(path=f"{PERFTEST_REPORTS_DIR}/{EVENTS_RATE_STATS_FILENAME}"):
     return load_series(path, int)
 
 
-def load_lost_events():
-    path = f"{PERFTEST_REPORTS_DIR}/{LOST_EVENTS_STATS_FILENAME}"
+def load_lost_events(path=f"{PERFTEST_REPORTS_DIR}/{LOST_EVENTS_STATS_FILENAME}"):
     return load_series(path, int)
 
 
-def load_cache_load():
-    path = f"{PERFTEST_REPORTS_DIR}/{CACHE_LOAD_STATS_FILENAME}"
+def load_cache_load(path=f"{PERFTEST_REPORTS_DIR}/{CACHE_LOAD_STATS_FILENAME}"):
     return load_series(path)
 
 
-def load_cached_events():
-    path = f"{PERFTEST_REPORTS_DIR}/{CACHED_EVENTS_STATS_FILENAME}"
+def load_cached_events(path=f"{PERFTEST_REPORTS_DIR}/{CACHED_EVENTS_STATS_FILENAME}"):
     return load_series(path, int)
 
 
-def add_div_tick(ax, div_value, label):
+def add_div_tick(ax, div_value, label, axis="x"):
     def get_tick_idx(ticks, lim):
         for i, x in enumerate(ticks):
             if lim < x:
                 return i
 
-    ticks = ax.get_xticks()
+    if axis == "x":
+        ticks = ax.get_xticks()
 
-    labels = [item.get_text() for item in ax.get_xticklabels()]
-    tick_idx = get_tick_idx(ticks, float(div_value))
+        labels = [item.get_text() for item in ax.get_xticklabels()]
+        tick_idx = get_tick_idx(ticks, float(div_value))
 
-    labels[tick_idx] = f"{labels[tick_idx]}\n{label}"
+        labels[tick_idx] = f"{labels[tick_idx]}\n{label}"
 
-    ax.set_xticks(ticks)
-    ax.set_xticklabels(labels)
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels)
+    else:
+        ticks = ax.get_yticks()
+
+        labels = [item.get_text() for item in ax.get_yticklabels()]
+        tick_idx = get_tick_idx(ticks, float(div_value))
+
+        labels[tick_idx] = f"{labels[tick_idx]}\n{label}"
+
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(labels)
 
 
 def filter_gt_zero(timestamps, values):
@@ -208,24 +302,26 @@ def align_series(ref_timestamps, timestamps, values):
     return timestamps[: len(ref_timestamps)], values[: len(timestamps)]
 
 
-def save_plot(pic_name: str = "events.png"):
+def save_plot(pic_name: str = "events.png", copy=True):
     EVENTS_PLOT_FILENAME = pic_name
     plt.savefig(EVENTS_PLOT_FILENAME, bbox_inches="tight")
-    shutil.copy(
-        Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
-    )
+    if copy:
+        shutil.copy(
+            Path(EVENTS_PLOT_FILENAME), f"{PERFTEST_REPORTS_DIR}/{EVENTS_PLOT_FILENAME}"
+        )
 
 
-# plt.plot(mem_stats_timestamps, mem_stats_mb)
+def load_events_rate(path) -> tuple[list, list, int]:
+    events_ts, events = load_events(path)
+    ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
+    ev_rate_ts, ev_rate = reduce_series_by_ts(ev_rate_ts, ev_rate, 2)
+    return ev_rate_ts, ev_rate, int(events[div_x_idx])
 
-# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-# start_time, end_time = get_test_ticks()
-
-
-def transform_data(y, threshold=50):
-    """Apply a transformation to make small values more visible."""
-    return np.where(y > threshold, y, np.log1p(y / threshold) * threshold)
+def load_lost_events_rate(path) -> tuple[list, list, int]:
+    lost_events_ts, lost_events = load_lost_events(path)
+    lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
+    return lost_events_ts, lost_events_rate, int(lost_events[-1])
 
 
 def show_all():
@@ -248,19 +344,11 @@ def show_all():
 
     ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
     ev_rate_ts, ev_rate = reduce_series_by_ts(ev_rate_ts, ev_rate, 2)
-    # ev_rate_ts, ev_rate = interpolate(ev_rate_ts, ev_rate, 60)
-
-    # ev_rate = transform_data(ev_rate)
-
-    # plt.setp(subplots, xlim=[0, ev_rate_ts[-1]])
-
-    # events_ts_int, ev_rate_int = filter_gt_zero(events_ts_int, ev_rate_int)
-    # events_ts_int, ev_rate_int = filter_start_inc(events_ts_int, ev_rate_int)
 
     ax1.set_xlim([0, ev_rate_ts[-1]])
     ax2.set_xlim([0, ev_rate_ts[-1]])
     ax3.set_xlim([0, ev_rate_ts[-1]])
-    ax4.set_xlim([0, ev_rate_ts[-1]])
+    # ax4.set_xlim([0, ev_rate_ts[-1]])
     ax4.set_ylim([0, 1.01])
 
     # lost events
@@ -286,7 +374,7 @@ def show_all():
 
     # plt.cla()
 
-    mem_stats_timestamps, mem_stats_mb = get_tracee_mem_stats()
+    mem_stats_timestamps, mem_stats_mb = load_tracee_mem_stats()
     mem_consumption_median = np.median(mem_stats_mb)
     mem_stats_timestamps, mem_stats_mb = interpolate(
         mem_stats_timestamps, mem_stats_mb, 60
@@ -332,9 +420,141 @@ def show_all():
     summary = update_summary()
     save_json(summary, REPORT_SUMMARY_FILE)
     return summary
-    summary = update_summary()
 
-    print(summary)
+
+def get_bench_summary_comparison(is_reversed=False, *results: BenchmarkResult) -> dict:
+    if not is_reversed:
+        summary = {"results": []}
+        for res in results:
+            res_json = {
+                "implementation": res.label,
+                "events_captured": res.events_captured + res.events_cached,
+                "events_lost": res.events_lost,
+                "memory_consumption_median_mb": res.mem_consumption_median,
+            }
+            summary["results"].append(res_json)
+    else:
+        summary = {
+            "Implementation": [],
+            "Events Captured": [],
+            "Events Lost": [],
+            "Median Memory Consumption (MB)": [],
+        }
+
+        for res in results:
+            summary["Implementation"].append(res.label)
+            summary["Events Captured"].append(res.events_captured + res.events_cached)
+            summary["Events Lost"].append(res.events_lost)
+            summary["Median Memory Consumption (MB)"].append(res.mem_consumption_median)
+
+    return summary
+
+
+def compare_results(first: BenchmarkResult, second: BenchmarkResult):
+    global div_x_idx
+
+    fig, subplots = plt.subplots(2, 2, figsize=(10, 5))
+    ((ax1, ax2), (ax3, ax4)) = subplots
+
+    ax1.set_xlabel("Time (seconds)")
+    ax1.set_ylabel("Events (rate)")
+    ax1.set(yscale="symlog")
+
+    ax2.set_xlabel("Time (seconds)")
+    ax2.set_ylabel("Lost events (increase rate)")
+
+    ax3.set_xlabel("Time (seconds)")
+    ax3.set_ylabel("Agent memory consumption (MB)")
+
+    ax4.set_xlabel("Time (seconds)")
+    ax4.set_ylabel("Cache load (rate)")
+
+    ev_range = [0, first.events_rate[-1]]
+    ax1.set_xlim(ev_range)
+    ax2.set_xlim(ev_range)
+    ax3.set_xlim(ev_range)
+    ax4.set_xlim(ev_range)
+    # ax4.set_ylim([0, 1.01])
+
+    ax1.plot(
+        first.events_rate,
+        first.events_rate_ts,
+        label=first.label,
+        color="red",
+    )
+
+    ax1.plot(
+        second.events_rate,
+        second.events_rate_ts,
+        label=second.label,
+        color="blue",
+    )
+
+    ax2.plot(
+        first.lost_events_rate,
+        first.lost_events_rate_ts,
+        label=first.label,
+        color="red",
+    )
+
+    ax2.plot(
+        second.lost_events_rate,
+        second.lost_events_rate_ts,
+        label=second.label,
+        color="blue",
+    )
+
+    ax3.plot(
+        first.mem_consumption_ts,
+        first.mem_consumption,
+        label=first.label,
+        color="red",
+    )
+
+    y_div = int(min(np.max(first.mem_consumption), np.max(second.mem_consumption)))
+    print(first.mem_consumption)
+    print(second.mem_consumption)
+    print(f"Minimum memory: {y_div}")
+    add_div_tick(ax3, y_div, str(y_div), "y")
+
+    ax3.plot(
+        second.mem_consumption_ts,
+        second.mem_consumption,
+        label=second.label,
+        color="blue",
+    )
+
+    ax4.plot(
+        first.cache_load_ts,
+        first.cache_load,
+        label=first.label,
+        color="red",
+    )
+    ax4.plot(
+        second.cache_load_ts,
+        second.cache_load,
+        label=second.label,
+        color="blue",
+    )
+
+    ax1.legend()
+    ax2.legend()
+    ax3.legend()
+    ax4.legend()
+
+    plt.tight_layout()
+
+    save_plot(copy=False)
+    comparison_filename = "comparison.json"
+
+    # Dirty workaround to
+    # TODO: refactor
+    summary = get_bench_summary_comparison(True, first, second)
+    save_json(summary, comparison_filename)
+    json_to_csv(comparison_filename)
+
+    summary = get_bench_summary_comparison(False, first, second)
+    save_json(summary, comparison_filename)
 
 
 def show_cache():
@@ -374,7 +594,14 @@ def show_cache():
 #     path = f"{PERFTEST_REPORTS_DIR}/{CACHE_LOAD_STATS_FILENAME}"
 #     return load_series(path)
 
-show_all()
+# show_all()
 
 # show_cache()
 # show_cache_comparison()
+
+
+first = BenchmarkResult("baseline", f"{environ['EXPERIMENTS_DIR']}/1-4-base-60s")
+second = BenchmarkResult(
+    "merging", f"{environ['EXPERIMENTS_DIR']}/3-2-merging-no-sleep"
+)
+compare_results(first, second)
