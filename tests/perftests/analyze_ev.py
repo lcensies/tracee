@@ -11,6 +11,10 @@ import pandas as pd
 from dataclasses import field
 from pathlib import Path
 from datetime import datetime
+import os
+import re
+import subprocess
+from scipy.interpolate import interp1d
 
 # import perfplot
 
@@ -22,7 +26,7 @@ div_x_idx = -1
 load_caption = "Load\nstop"
 
 # TODO: average
-PERFTEST_REPORTS_DIR = f"{environ['PERFTEST_REPORTS_DIR']}/1/tracee"
+PERFTEST_REPORTS_DIR = f"{environ['PERFTEST_REPORTS_DIR']}"
 print(PERFTEST_REPORTS_DIR)
 REPORT_SUMMARY_FILE = f"{PERFTEST_REPORTS_DIR}/summary.json"
 
@@ -87,7 +91,14 @@ class BenchmarkResult:
     mem_consumption_ts: list = field(default_factory=list)
 
     def __post_init__(self):
-        self.output_dir = self.output_dir + "/tracee"
+        def has_subdirectory(directory, subdirectory_name):
+            for entry in os.scandir(directory):
+                if entry.is_dir() and entry.name == subdirectory_name:
+                    return True
+            return False
+
+        if has_subdirectory(self.output_dir, "tracee"):
+            self.output_dir = self.output_dir + "/tracee"
 
         ev_rate_file = get_events_file(self.output_dir)
         self.events_rate, self.events_rate_ts, self.events_captured = load_events_rate(
@@ -172,6 +183,7 @@ def load_tracee_mem_stats(
 
 def get_ev_inc_rate(timestamps, events) -> tuple[list[float], list[float]]:
     pass
+    assert len(timestamps) == len(events)
     ts_diff = timestamps[1] - timestamps[0]
 
     rates: list[float] = []
@@ -295,6 +307,15 @@ def interpolate(timestamps, values, n_points=60):
     return ts_int, values_int
 
 
+def interpolate_lin(timestamps, values, n_points=60):
+    # Create the interpolating function
+    ts_int = np.linspace(timestamps[0], timestamps[-1], n_points)
+    f = interp1d(timestamps, values, kind="linear", fill_value="extrapolate")
+    # Interpolate missing values
+    y_int = f(ts_int)
+    return ts_int, y_int
+
+
 def align_series(ref_timestamps, timestamps, values):
     return timestamps[: len(ref_timestamps)], values[: len(timestamps)]
 
@@ -311,13 +332,18 @@ def save_plot(pic_name: str = "events.png", copy=True):
 def load_events_rate(path) -> tuple[list, list, int]:
     events_ts, events = load_events(path)
     ev_rate_ts, ev_rate = get_ev_inc_rate(events_ts, events)
-    ev_rate_ts, ev_rate = reduce_series_by_ts(ev_rate_ts, ev_rate, 2)
+    # ev_rate_ts, ev_rate = reduce_series_by_ts(ev_rate_ts, ev_rate, 2)
+    # ev_rate_ts, ev_rate = interpolate(ev_rate_ts, ev_rate, 120)
+    # ev_rate_ts, ev_rate = interpolate_lin(ev_rate_ts, ev_rate, 120)
     return ev_rate_ts, ev_rate, int(events[div_x_idx])
 
 
 def load_lost_events_rate(path) -> tuple[list, list, int]:
     lost_events_ts, lost_events = load_lost_events(path)
     lost_events_ts, lost_events_rate = get_ev_inc_rate(lost_events_ts, lost_events)
+
+    assert len(lost_events_ts) == len(lost_events_rate)
+    lost_events_ts, lost_events_rate = interpolate_lin(lost_events_ts, lost_events_rate)
     return lost_events_ts, lost_events_rate, int(lost_events[-1])
 
 
@@ -474,15 +500,15 @@ def compare_results(first: BenchmarkResult, second: BenchmarkResult):
     )
 
     ax2.plot(
-        first.lost_events_rate,
         first.lost_events_rate_ts,
+        first.lost_events_rate,
         label=first.label,
         color="red",
     )
 
     ax2.plot(
-        second.lost_events_rate,
         second.lost_events_rate_ts,
+        second.lost_events_rate,
         label=second.label,
         color="blue",
     )
@@ -560,11 +586,13 @@ def cmp_pgbench_default():
 
 
 def cmp_pgbench_gen():
-    first = BenchmarkResult("baseline", f"{environ['EXPERIMENTS_DIR']}/1-4-base-60s")
+    first = BenchmarkResult(
+        "baseline", f"{environ['EXPERIMENTS_DIR']}/7-base-pgbench-gen-sleep"
+    )
     second = BenchmarkResult(
-        "merging", f"{environ['EXPERIMENTS_DIR']}/3-2-merging-no-sleep"
+        "merging", f"{environ['EXPERIMENTS_DIR']}/8-merging-pgbench-gen-sleep"
     )
     compare_results(first, second)
 
 
-cmp_pgbench_default()
+cmp_pgbench_gen()
