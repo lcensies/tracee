@@ -78,6 +78,12 @@ run_tracee() {
 	do sleep 1; done
 }
 
+run_pgbench_gen() {
+	exported_env="$(cat "$SCRIPT_DIR/.env" | grep -E "^PG|^DATABASE|DOCKER_POSTGRES" | grep -v exported)"
+	echo "$exported_env" >"$PGBENCH_ROOT/.env"
+	cd "$PGBENCH_ROOT" && source "$PGBENCH_ROOT/.env" && make db && make pgbench-init
+}
+
 run_pgbench() {
 	exported_env="$(cat "$SCRIPT_DIR/.env" | grep -E "^PG|^DATABASE|DOCKER_POSTGRES" | grep -v exported)"
 	echo "$exported_env" >"$PGBENCH_ROOT/.env"
@@ -101,6 +107,26 @@ run_dos() {
 	sleep $DOS_DURATION_SEC
 }
 
+sleep_from_interval() {
+	local start_time=$1
+	local interval=$2
+
+	# Get the current time in seconds since the epoch
+	local current_time=$(date +%s)
+
+	# Calculate the target time
+	local target_time=$((start_time + interval))
+
+	# Calculate the sleep duration
+	local sleep_duration=$((target_time - current_time))
+	echo sleeping $sleep_duration seconds
+
+	# Sleep only if the sleep duration is greater than 0
+	if [ $sleep_duration -gt 0 ]; then
+		sleep $sleep_duration
+	fi
+}
+
 # TODO: switch to Makefile
 run_workload() {
 	start_time=$(date +%s)
@@ -108,11 +134,15 @@ run_workload() {
 	echo "{\"start_time\": \"$start_time\"}" | sudo tee /tmp/tracee/start_time.json
 
 	case "$TEST_TYPE" in
+	"pgbench-gen") run_pgbench_gen ;;
 	"pgbench") run_pgbench ;;
 	"dos") run_dos ;;
 	"sleep") sleep $TEST_DURATION ;;
 	*) echo invalid test type && exit 1 ;;
 	esac
+
+	sleep_from_interval $start_time $TEST_DURATION
+	# sleep $POST_TEST_SLEEP_SEC
 
 	end_time=$(date +%s)
 	diff_seconds="$(($end_time - $start_time))"
@@ -156,7 +186,6 @@ fetch_events_stats() {
 	curl "$WEBHOOK_ADDR" | sudo tee "$EVENTS_STATS_FILE"
 	curl "$WEBHOOK_ADDR/fileevents" | sudo tee "$FILE_IO_STATS_FILE"
 	# curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"
-
 }
 
 fetch_post_sleep_stats() {
@@ -193,11 +222,11 @@ _main() {
 	run_workload
 
 	set_webhook_ts_limit
+
 	stop_workloads
 	# wait_tracee_sink
 
 	fetch_events_stats
-	sleep $POST_TEST_SLEEP_SEC
 	fetch_post_sleep_stats
 }
 
