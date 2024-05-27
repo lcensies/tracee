@@ -19,7 +19,7 @@ VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 
 # start mock server to receive events
-make run-mockserv
+cd ${SCRIPT_DIR} && make run-mockserv
 # ensure tracee dir exists on host
 mkdir -p /tmp/tracee
 
@@ -41,14 +41,25 @@ run_test() {
 
 # echo reports dir: $PERFTEST_REPORTS_DIR && exit 1
 
-for i in $(seq 1 $TEST_N_RUNS); do
+if [ "$TEST_N_RUNS" -gt 1 ]; then
+	for i in $(seq 1 $TEST_N_RUNS); do
+		run_test
+		mkdir -p "$PERFTEST_REPORTS_DIR/$i"
+		cp -r /tmp/tracee/ "$PERFTEST_REPORTS_DIR/$i"
+		# Save current config environment to reference it later
+		cp "$SCRIPT_DIR/.env" "$PERFTEST_REPORTS_DIR/$i"
+	done
+else
 	run_test
-	mkdir -p "$PERFTEST_REPORTS_DIR/$i"
-	cp -r /tmp/tracee/ "$PERFTEST_REPORTS_DIR/$i"
-done
+	mkdir -p "$PERFTEST_REPORTS_DIR/"
+	cp -r /tmp/tracee/ "$PERFTEST_REPORTS_DIR/"
+	cp "$SCRIPT_DIR/.env" "$PERFTEST_REPORTS_DIR/"
+fi
 
 # TODO: create snapshot only if it doesn't exist
 # $VAGRANT_CMD snapshot save tracee_vm base
 # cd "$TRACEE_ROOT" && vagrant snapshot restore "$VM_NAME" base
 
 python3 "${SCRIPT_DIR}/analyze_ev.py"
+python3 "${SCRIPT_DIR}/get_top_io.py"
+"${SCRIPT_DIR}/copy_comparison.sh"
