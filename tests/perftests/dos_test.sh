@@ -108,22 +108,22 @@ run_dos() {
 }
 
 sleep_from_interval() {
-	local start_time=$1
-	local interval=$2
+	local _start_time=$1
+	local _interval=$2
 
 	# Get the current time in seconds since the epoch
-	local current_time=$(date +%s)
+	local _current_time=$(date +%s)
 
 	# Calculate the target time
-	local target_time=$((start_time + interval))
+	local _target_time=$((_start_time + _interval))
 
 	# Calculate the sleep duration
-	local sleep_duration=$((target_time - current_time))
-	echo sleeping $sleep_duration seconds
+	local _sleep_duration=$((_target_time - _current_time))
+	echo sleeping $_sleep_duration seconds
 
 	# Sleep only if the sleep duration is greater than 0
-	if [ $sleep_duration -gt 0 ]; then
-		sleep $sleep_duration
+	if [ $_sleep_duration -gt 0 ]; then
+		sleep $_sleep_duration
 	fi
 }
 
