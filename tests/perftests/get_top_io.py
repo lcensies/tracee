@@ -4,108 +4,64 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-# Example JSON data with more entries under the same directory
-# data = [
-#     {
-#         "pathname": "/usr/lib/x86_64-linux-gnu/libldap-2.5.so.0.1.8",
-#         "image": "",
-#         "process": "psql",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 4,
-#     },
-#     {
-#         "pathname": "/usr/lib/x86_64-linux-gnu/libssl-1.1.so.1.1.0",
-#         "image": "",
-#         "process": "apache2",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 3,
-#     },
-#     {
-#         "pathname": "/usr/lib/x86_64-linux-gnu/libcrypto-1.1.so.1.1.0",
-#         "image": "",
-#         "process": "apache2",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 5,
-#     },
-#     {
-#         "pathname": "/run/containerd/io.containerd.runtime.v2.task/moby/36db8468b7d1ac8ff4bc49a155eae6bc9a2796933f220a22f5e47671ae063eda/.address",
-#         "image": "",
-#         "process": "containerd-shim",
-#         "event": "vfs_write",
-#         "dev_type": "",
-#         "count": 1,
-#     },
-#     {
-#         "pathname": "/host/proc/sys/kernel/pid_max",
-#         "image": "",
-#         "process": "node_exporter",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 1,
-#     },
-#     {
-#         "pathname": "/var/log/syslog",
-#         "image": "",
-#         "process": "rsyslogd",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 10,
-#     },
-#     {
-#         "pathname": "/var/log/auth.log",
-#         "image": "",
-#         "process": "rsyslogd",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 6,
-#     },
-#     {
-#         "pathname": "/var/log/kern.log",
-#         "image": "",
-#         "process": "rsyslogd",
-#         "event": "security_file_open",
-#         "dev_type": "",
-#         "count": 8,
-#     },
-# ]
-
 load_dotenv()
 
 
-file_io_file = os.path.join(os.environ["PERFTEST_REPORTS_DIR"], "file_io_metrics.json")
+def has_subdirectory(directory, subdirectory_name):
+    for entry in os.scandir(directory):
+        if entry.is_dir() and entry.name == subdirectory_name:
+            return True
+    return False
+
+
+reports_dir = os.environ["PERFTEST_REPORTS_DIR"]
+if has_subdirectory(reports_dir, "tracee"):
+    reports_dir = os.path.join(reports_dir, "tracee")
+
+file_io_file = os.path.join(reports_dir, "file_io_metrics.json")
+
+
 with open(file_io_file) as f:
     data = json.load(f)
 
 
 # Aggregate counts by directory
 def aggregate_counts(data):
-    directory_counts = defaultdict(int)
+    directory_counts = defaultdict(lambda: defaultdict(int))
+    directory_processes = defaultdict(set)
     directory_entries = defaultdict(list)
 
     for entry in data:
         directory = str(Path(entry["pathname"]).parent)
-        directory_counts[directory] += entry["count"]
+        event_type = entry["event"]
+
+        directory_counts[directory][event_type] += entry["count"]
+        directory_processes[directory].add(entry["process"])
         directory_entries[directory].append(entry)
 
-    return directory_counts, directory_entries
+    return directory_counts, directory_entries, directory_processes
 
 
 # Flatten the directory counts into a list of entries
-def flatten_entries(directory_entries):
+def flatten_entries(directory_entries, directory_counts, directory_processes):
     flat_entries = []
     for directory, entries in directory_entries.items():
+        process = (
+            entries[0]["process"] if len(directory_processes[directory]) == 1 else "*"
+        )
         if len(entries) == 1:
-            flat_entries.append(entries[0])
+            entry = entries[0]
+            entry["process"] = process
+            entry.update(directory_counts[directory])  # Update entry with counts
+            flat_entries.append(entry)
         else:
-            flat_entries.append(
-                {
-                    "pathname": f"{directory}/*",
-                    "count": sum(entry["count"] for entry in entries),
-                }
-            )
+            aggregated_entry = {
+                "pathname": f"{directory}/*",
+                "process": process,
+                "count": sum(directory_counts[directory].values()),
+            }
+            aggregated_entry.update(directory_counts[directory])
+            flat_entries.append(aggregated_entry)
     return flat_entries
 
 
@@ -118,8 +74,12 @@ current_entries = data
 all_entries = []
 
 while True:
-    directory_counts, directory_entries = aggregate_counts(current_entries)
-    flat_entries = flatten_entries(directory_entries)
+    directory_counts, directory_entries, directory_processes = aggregate_counts(
+        current_entries
+    )
+    flat_entries = flatten_entries(
+        directory_entries, directory_counts, directory_processes
+    )
     all_entries.extend(flat_entries)
 
     cumulative_count = sum(entry["count"] for entry in all_entries)
@@ -140,10 +100,16 @@ top_entries = sorted(all_entries, key=lambda x: x["count"], reverse=True)[:5]
 
 print("Top 5 entries by count:")
 for entry in top_entries:
-    print(f"{entry['pathname']}: {entry['count']}")
-
+    event_counts = ", ".join(
+        f"{event}: {count}"
+        for event, count in entry.items()
+        if event not in ["pathname", "process", "count"]
+    )
+    print(
+        f"{entry['pathname']} (Process: {entry['process']}): {entry['count']} ({event_counts})"
+    )
 
 output_path = os.path.join(os.environ["PERFTEST_REPORTS_DIR"], "top_io.json")
 print(output_path)
 with open(output_path, "w") as f:
-    json.dump(top_entries, f)
+    json.dump(top_entries, f, indent=2)
