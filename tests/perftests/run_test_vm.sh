@@ -1,5 +1,6 @@
 #!/bin/bash -x
 
+TRACEE_ROOT=$(git rev-parse --show-toplevel)
 SCRIPT_DIR="$(cd ${0%/*} && pwd -P)"
 source "$SCRIPT_DIR/.env"
 
@@ -26,7 +27,7 @@ mkdir -p /tmp/tracee
 cd "$TRACEE_ROOT"
 
 run_test() {
-	vagrant reload
+	$VM_RELOAD_NEEDED && vagrant reload
 
 	$BUILD_TRACEE && $VM_SSH_CMD make -f builder/Makefile.tracee-container build-tracee
 
@@ -62,4 +63,3 @@ fi
 
 python3 "${SCRIPT_DIR}/analyze_ev.py"
 python3 "${SCRIPT_DIR}/get_top_io.py"
-"${SCRIPT_DIR}/copy_comparison.sh"
