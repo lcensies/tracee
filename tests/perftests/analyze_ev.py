@@ -15,10 +15,12 @@ import os
 import re
 import subprocess
 from scipy.interpolate import interp1d
+from matplotlib.pyplot import cm
 
 # import perfplot
 
 load_dotenv()
+load_dotenv(".local.env")
 
 div_x_idx = -1
 
@@ -414,7 +416,6 @@ def show_all():
     # add_div_tick(ax4, div_x, load_caption)
 
     save_plot()
-
     # MEM_PLOT_PNG = "mem_consumption.png"
     # plt.savefig(MEM_PLOT_PNG, bbox_inches="tight")
     # shutil.copy(Path(MEM_PLOT_PNG), f"{PERFTEST_REPORTS_DIR}/{MEM_PLOT_PNG}")
@@ -459,7 +460,7 @@ def get_bench_summary_comparison(is_reversed=False, *results: BenchmarkResult) -
     return summary
 
 
-def compare_results(first: BenchmarkResult, second: BenchmarkResult):
+def compare_results(*results: BenchmarkResult):
     global div_x_idx
 
     fig, subplots = plt.subplots(2, 2, figsize=(10, 5))
@@ -478,70 +479,48 @@ def compare_results(first: BenchmarkResult, second: BenchmarkResult):
     ax4.set_xlabel("Time (seconds)")
     ax4.set_ylabel("Cache load (rate)")
 
-    ev_range = [0, first.events_rate[-1]]
+    ev_range = [0, results[0].events_rate[-1]]
     ax1.set_xlim(ev_range)
     ax2.set_xlim(ev_range)
     ax3.set_xlim(ev_range)
     ax4.set_xlim(ev_range)
     # ax4.set_ylim([0, 1.01])
+    colors = cm.rainbow(np.linspace(0, 1, len(results)))
+    # for i, c in enumerate(color):
+    # plt.plot(x, y, c=c)
 
-    ax1.plot(
-        first.events_rate,
-        first.events_rate_ts,
-        label=first.label,
-        color="red",
-    )
+    # max_mems = [np.max(x.mem_consumption) for x in results]
+    # y_div = min(max_mems)
+    # add_div_tick(ax3, y_div, str(y_div), "y")
 
-    ax1.plot(
-        second.events_rate,
-        second.events_rate_ts,
-        label=second.label,
-        color="blue",
-    )
+    for i, res in enumerate(results):
+        ax1.plot(
+            res.events_rate,
+            res.events_rate_ts,
+            label=res.label,
+            color=colors[i],
+        )
 
-    ax2.plot(
-        first.lost_events_rate_ts,
-        first.lost_events_rate,
-        label=first.label,
-        color="red",
-    )
+        ax2.plot(
+            res.lost_events_rate_ts,
+            res.lost_events_rate,
+            label=res.label,
+            color=colors[i],
+        )
 
-    ax2.plot(
-        second.lost_events_rate_ts,
-        second.lost_events_rate,
-        label=second.label,
-        color="blue",
-    )
+        ax3.plot(
+            res.mem_consumption_ts,
+            res.mem_consumption,
+            label=res.label,
+            color=colors[i],
+        )
 
-    ax3.plot(
-        first.mem_consumption_ts,
-        first.mem_consumption,
-        label=first.label,
-        color="red",
-    )
-
-    y_div = int(min(np.max(first.mem_consumption), np.max(second.mem_consumption)))
-    add_div_tick(ax3, y_div, str(y_div), "y")
-
-    ax3.plot(
-        second.mem_consumption_ts,
-        second.mem_consumption,
-        label=second.label,
-        color="blue",
-    )
-
-    ax4.plot(
-        first.cache_load_ts,
-        first.cache_load,
-        label=first.label,
-        color="red",
-    )
-    ax4.plot(
-        second.cache_load_ts,
-        second.cache_load,
-        label=second.label,
-        color="blue",
-    )
+        ax4.plot(
+            res.cache_load_ts,
+            res.cache_load,
+            label=res.label,
+            color=colors[i],
+        )
 
     ax1.legend()
     ax2.legend()
@@ -555,23 +534,31 @@ def compare_results(first: BenchmarkResult, second: BenchmarkResult):
 
     # Dirty workaround to
     # TODO: refactor
-    summary = get_bench_summary_comparison(True, first, second)
+    summary = get_bench_summary_comparison(True, *results)
     save_json(summary, comparison_filename)
     json_to_csv(comparison_filename)
 
-    summary = get_bench_summary_comparison(False, first, second)
+    summary = get_bench_summary_comparison(False, *results)
     save_json(summary, comparison_filename)
 
 
-def show_cache():
-    print("show_cache")
-    cache_load_timestamps, cache_load = load_cache_load()
-
-    plt.plot(cache_load_timestamps, [round(float(x), 2) for x in cache_load])
+def show_cache(*results: BenchmarkResult):
     ax = plt.gca()
     ax.set_xlabel("Time (seconds)")
     ax.set_ylabel("Cache load (rate)")
+    colors = cm.rainbow(np.linspace(0, 1, len(results)))
+    for i, res in enumerate(results):
+        plt.plot(
+            res.cache_load_ts,
+            res.cache_load,
+            label=res.label,
+            color=colors[i],
+        )
+
+    plt.legend()
+    plt.tight_layout()
     save_plot("cache.png")
+    shutil.copy(Path("cache.png"), f"{PERFTEST_REPORTS_DIR}/cache.png")
 
 
 # TODO: parametrize
@@ -595,4 +582,34 @@ def cmp_pgbench_gen():
     compare_results(first, second)
 
 
-cmp_pgbench_gen()
+def cmp_increased_output():
+    first = BenchmarkResult(
+        "baseline", f"{environ['EXPERIMENTS_DIR']}/10-output-increased-sleep"
+    )
+    second = BenchmarkResult(
+        "increased_out_chan", f"{environ['EXPERIMENTS_DIR']}/9-base-sleep"
+    )
+    compare_results(first, second)
+
+
+cpulim_results = [
+    BenchmarkResult("cpulim_5%", f"{environ['EXPERIMENTS_DIR']}/11-base-cpulim-5"),
+    BenchmarkResult("cpulim_10%", f"{environ['EXPERIMENTS_DIR']}/12-base-cpulim-10"),
+    BenchmarkResult("cpulim_20%", f"{environ['EXPERIMENTS_DIR']}/13-base-cpulim-20"),
+    BenchmarkResult("cpulim_50%", f"{environ['EXPERIMENTS_DIR']}/14-base-cpulim-50"),
+]
+
+
+def cmp_cpulim():
+    compare_results(*cpulim_results)
+
+
+def cmp_cpulim_cache():
+    show_cache(*cpulim_results)
+
+
+cmp_cpulim_cache()
+
+# cmp_cpulim()
+# cmp_increased_output()
+# cmp_pgbench_gen()

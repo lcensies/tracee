@@ -1,7 +1,10 @@
 #!/bin/bash -ex
 
 SCRIPT_DIR="$(cd ${0%/*} && pwd -P)"
+# general test config
 source "$SCRIPT_DIR/.env"
+# host-specific variables
+source "$SCRIPT_DIR/.local.env"
 
 run_prometheus() {
 	perf_compose="$TRACEE_ROOT/performance/dashboard/docker-compose.yml"
@@ -70,8 +73,6 @@ run_tracee() {
 		$TRACEE_CMD $TRACEE_FLAGS
 	fi
 
-	echo TRACEE_CMD is "$TRACEE_CMD"
-
 	echo Waiting for tracee to start
 	while
 		! (curl -s "$TRACEE_LISTEN_ADDR/healthz" | grep -q "OK")
@@ -118,12 +119,12 @@ sleep_from_interval() {
 	local _target_time=$((_start_time + _interval))
 
 	# Calculate the sleep duration
-	local _sleep_duration=$((_target_time - _current_time))
-	echo sleeping $_sleep_duration seconds
+	local sleep_duration=$((_target_time - _current_time))
+	echo sleeping $sleep_duration seconds
 
 	# Sleep only if the sleep duration is greater than 0
-	if [ $_sleep_duration -gt 0 ]; then
-		sleep $_sleep_duration
+	if [ $sleep_duration -gt 0 ]; then
+		sleep $sleep_duration
 	fi
 }
 
@@ -185,7 +186,6 @@ run_benchmark() {
 fetch_events_stats() {
 	curl "$WEBHOOK_ADDR" | sudo tee "$EVENTS_STATS_FILE"
 	curl "$WEBHOOK_ADDR/fileevents" | sudo tee "$FILE_IO_STATS_FILE"
-	# curl -g "$PROMETHEUS_ADDR/api/v1/query?query=tracee_ebpf_lostevents_total[120m]" | sudo tee "$EVENTS_LOST_STATS_FILE"
 }
 
 fetch_post_sleep_stats() {
@@ -201,10 +201,11 @@ fetch_post_sleep_stats() {
 stop_tracee() {
 	# sudo killall tracee 2>/dev/null || :
 	docker stop tracee 2>/dev/null || :
-
 	while [ "$(tracee_is_running)" = "true" ]; do
 		sleep 0.1
 	done
+
+	sudo rm -rf /tmp/tracee 2>/dev/null || :
 }
 
 set_webhook_ts_limit() {
@@ -230,4 +231,16 @@ _main() {
 	fetch_post_sleep_stats
 }
 
-_main
+# TODO: move functions to Makefile
+declare -A ACTIONS
+ACTIONS=(
+	[run_tracee]=run_tracee
+	[stop_tracee]=stop_tracee
+)
+
+function_name="${1}"
+if [[ -n $function_name && -n "${ACTIONS[$function_name]}" ]]; then
+	${ACTIONS[$function_name]}
+else
+	_main
+fi

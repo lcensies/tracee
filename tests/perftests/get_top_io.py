@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
+load_dotenv(".local.env")
 
 
 def has_subdirectory(directory, subdirectory_name):
