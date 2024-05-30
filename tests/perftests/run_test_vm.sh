@@ -3,6 +3,7 @@
 TRACEE_ROOT=$(git rev-parse --show-toplevel)
 SCRIPT_DIR="$(cd ${0%/*} && pwd -P)"
 source "$SCRIPT_DIR/.env"
+source "$SCRIPT_DIR/.local.env"
 
 # TODO: auto discover forwarded port and auto choose it for SSH_CMD
 # default: 22 (guest) => 2222 (host) (adapter 1)
