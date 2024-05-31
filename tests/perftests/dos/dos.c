@@ -1,0 +1,99 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+
+void run_mask_command(int n_iters)
+{
+    FILE *fp;
+
+    // mask the real call
+    for (int i = 0; i < n_iters; i++) {
+        fp = fopen("/etc/passwd", "r");
+        fclose(fp);
+    }
+}
+
+struct timespec seconds_to_timespec(float sec)
+{
+    struct timespec req;
+
+    req.tv_sec = (time_t) sec;                       // Extract seconds
+    req.tv_nsec = (long) ((sec - req.tv_sec) * 1e9); // Extract nanoseconds
+
+    return req;
+}
+
+void start_dos(int n_fake_syscalls, const char *real_command, float sleep_interval_sec)
+{
+    FILE *fpp;
+    char buf[1024];
+    struct timespec sleep_timespec = seconds_to_timespec(sleep_interval_sec);
+
+    printf("N_FAKE_SYSCALLS: %d\n", n_fake_syscalls);
+    printf("REAL_COMMAND: %s\n", real_command);
+    printf("SLEEP_INTERVAL: %f\n", sleep_interval_sec);
+
+    while (1) {
+        run_mask_command(n_fake_syscalls);
+
+        //-----------------Real call--------------------//
+
+        if ((fpp = popen(real_command, "r")) == NULL) {
+            printf("Error opening pipe!\n");
+            return;
+        }
+
+        while (fgets(buf, 1024, fpp) != NULL)
+            printf("OUTPUT: %s", buf);
+
+        if (pclose(fpp)) {
+            printf("Command not found or exited with error status\n");
+            return;
+        }
+
+        run_mask_command(n_fake_syscalls);
+
+        nanosleep(&sleep_timespec, NULL);
+    }
+}
+
+void print_usage()
+{
+    printf("Usage: dos [N_FAKE_SYSCALLS] [REAL_CALL] [SLEEP_TIMEOUT]");
+}
+
+void timeout_handler(int sig)
+{
+    printf("DoS is timed out\n");
+    exit(EXIT_SUCCESS);
+}
+
+void setup_timeout(int timeout)
+{
+    signal(SIGALRM, timeout_handler);
+    alarm(timeout);
+}
+
+int main(int argc, char *argv[])
+{
+    char *real_command;
+    int iters;
+    float dos_timeout;
+    float sleep_timeout;
+
+    iters = atoi(getenv("DOS_N_FAKE_COMMANDS"));
+    real_command = getenv("DOS_MALICIOUS_COMMAND");
+    sleep_timeout = atof(getenv("DOS_SLEEP_DURATION_SEC"));
+    dos_timeout = atof(getenv("DOS_N_FAKE_COMMANDS"));
+
+    setup_timeout(dos_timeout);
+    printf("Running dos with %d iterations, %f sleep timeout, %s hidden command\n",
+           iters,
+           sleep_timeout,
+           real_command);
+
+    start_dos(iters, real_command, sleep_timeout);
+}
