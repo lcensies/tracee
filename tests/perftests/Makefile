@@ -1,7 +1,11 @@
 
 SHELL := /bin/bash
 
-all: run-tracee
+all: dos_test
+
+.PHONY: dos_test
+dos_test:
+	./run_test_vm.sh
 
 .PHONY: run-tracee
 run-tracee:
@@ -15,7 +19,5 @@ stop-tracee:
 .PHONY:
 # TODO: parametrize mockserv port
 run-mockserv:
-	docker build -t tracee-mockserver mockserver
-	(docker ps | grep mockserv) || \
-		docker run --rm -d --name tracee-mockserver -p 3434:3434 tracee-mockserver
+	make -f mockserver/Makefile run
 	
