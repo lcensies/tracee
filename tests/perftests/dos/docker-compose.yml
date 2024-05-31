@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  dos:
+    build: .
+    image: dos:latest
+    container_name: dos
+    env_file:
+      - path: ${PWD}/.env
+        required: true 
+    resources:
+      limits:
+        cpus: '${DOS_CPU_LIMIT}'
+    restart: unless-stopped
+
