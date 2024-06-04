@@ -21,7 +21,7 @@ VM_SSH_CMD="ssh $VM_SSH_OPTS $VM_SSH_ROOT cd /vagrant && source ~/.profile && $(
 [[ -f "$VM_SSH_PRIVKEY" ]] || (echo "ssh private key is not found at $VM_SSH_PRIVKEY" && exit 1)
 
 # start mock server to receive events
-cd ${SCRIPT_DIR} && make run-mockserv
+cd ${SCRIPT_DIR}/mockserver && make run
 # ensure tracee dir exists on host
 mkdir -p /tmp/tracee
 
@@ -61,6 +61,3 @@ fi
 # TODO: create snapshot only if it doesn't exist
 # $VAGRANT_CMD snapshot save tracee_vm base
 # cd "$TRACEE_ROOT" && vagrant snapshot restore "$VM_NAME" base
-
-python3 "${SCRIPT_DIR}/analyze_ev.py"
-python3 "${SCRIPT_DIR}/get_top_io.py"
