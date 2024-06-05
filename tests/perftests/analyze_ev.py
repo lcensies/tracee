@@ -608,7 +608,22 @@ def cmp_cpulim_cache():
     show_cache(*cpulim_results)
 
 
-cmp_cpulim_cache()
+def cmp_dos():
+    dos_results = [
+        BenchmarkResult(
+            "dos_base_180s", f"{environ['EXPERIMENTS_DIR']}/20-base-dos-cpulim-10-180s"
+        ),
+        # BenchmarkResult(
+        #     "dos_merging_180s",
+        #     f"{environ['EXPERIMENTS_DIR']}/21-merging-dos-cpulim-10-180s",
+        # ),
+    ]
+    compare_results(*dos_results)
+
+
+cmp_dos()
+
+# cmp_cpulim_cache()
 
 # cmp_cpulim()
 # cmp_increased_output()
