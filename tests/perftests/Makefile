@@ -7,6 +7,10 @@ all: dos_test
 dos_test:
 	./run_test_vm.sh
 
+.PHONY: run_dos
+run_dos:
+	./dos_test.sh run_dos
+
 .PHONY: run-tracee
 run-tracee:
 	./dos_test.sh stop_tracee
