@@ -93,13 +93,15 @@ run_pgbench() {
 
 run_dos() {
 
-	cd /vagrant && make -f builder/Makefile.dos-container
+	cd $SCRIPT_DIR/dos && make build
+	# cd /vagrant && make -f builder/Makefile.dos-container
 
 	echo Starting dos container for $DOS_DURATION_SEC seconds
 	# dos "$DOS_N_FAKE_COMMANDS" "$DOS_MALICIOUS_COMMAND" "$DOS_SLEEP_DURATION_SEC"
-	docker run -d --rm --name dos \
+	docker run $DOCKER_DOS_INTERACTIVE_FLAG --rm --name dos \
 		--cpus "$DOS_CPU_LIMIT" \
 		-e DOS_DURATION_SEC="$DOS_DURATION_SEC" \
+		-e DOS_N_PROCESSES="$DOS_N_PROCESSES" \
 		-e DOS_CMD="$DOS_CMD" \
 		-e DOS_N_FAKE_COMMANDS="$DOS_N_FAKE_COMMANDS" \
 		-e DOS_MALICIOUS_COMMAND="$DOS_MALICIOUS_COMMAND" \
@@ -235,6 +237,7 @@ _main() {
 declare -A ACTIONS
 ACTIONS=(
 	[run_tracee]=run_tracee
+	[run_dos]=run_dos
 	[stop_tracee]=stop_tracee
 )
 
